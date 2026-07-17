@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化
-// @version      1.5.20
+// @version      1.5.22
 // @author       X.I.U
 // @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
@@ -223,6 +223,10 @@ html[data-theme=light] .AppHeader-notifications:not([aria-label=通知])>div:fir
 .Question-main {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
 @media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Question-main {width: auto !important;}}
 @media only screen and (max-width: ${GM_getValue('menu_widescreenDisplayWidth')-100}px) {.Question-main {width: 98.5% !important;}}
+.QuestionPage > div:has(.ListShortcut > .Question-mainColumn) {width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important;}
+.QuestionPage > div:has(.ListShortcut > .Question-mainColumn) .ListShortcut,
+.QuestionPage > div:has(.ListShortcut > .Question-mainColumn) .Question-mainColumn {width: 100% !important;max-width: none !important;}
+@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.QuestionPage > div:has(.ListShortcut > .Question-mainColumn) {width: 97.5% !important;}}
 .AuthorInfo {max-width: 100% !important;}
 `,
             style_widescreenDisplaySearch = `/* 宽屏显示 - 搜索页 */
