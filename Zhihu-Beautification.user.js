@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化
-// @version      1.5.20
+// @version      1.5.25
 // @author       X.I.U
 // @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
@@ -36,6 +36,7 @@
         ['menu_darkModeType', '暗黑模式切换（1~4）', '暗黑模式切换', 1],
         ['menu_darkModeAuto', '暗黑模式跟随浏览器', '暗黑模式跟随浏览器', false],
         ['menu_picHeight', '调整图片最大高度', '调整图片最大高度', true],
+        ['menu_imageViewer', '正文图片查看器', '点击正文静态图片后打开查看器（GIF 保持知乎原生播放）', false],
         ['menu_postimg', '隐藏文章开头大图', '隐藏文章开头大图', true],
         ['menu_hideTitle', '向下翻时自动隐藏顶栏', '向下翻时自动隐藏顶栏', true]
     ], menu_ID = [];
@@ -46,6 +47,7 @@
     addStyle();
     // 向下翻时自动隐藏顶栏
     if (menu_value('menu_hideTitle')) setTimeout(hideTitle, 2000);
+    if (menu_value('menu_imageViewer')) initImageViewer();
 
     // 注册脚本菜单
     function registerMenuCommand() {
@@ -497,6 +499,88 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                 }
             });
         }
+    }
+
+    // 正文图片查看器：只接管非链接的正文静态图片；知乎 GIF 未暴露 video 源时保留原生播放。
+    function initImageViewer() {
+        let overlay, stage, media, items = [], index = -1, scale = 1, x = 0, y = 0, rotate = 0;
+        let dragging = false, startX = 0, startY = 0, originX = 0, originY = 0;
+
+        const contentSelector = '.RichContent, .Post-content, .ztext, .AnswerItem, .QuestionAnswer-content';
+        const realUrl = img => img.getAttribute('data-original') || img.getAttribute('data-actualsrc') || img.currentSrc || img.src;
+        const mediaInfo = img => {
+            if (img.closest('.GifPlayer')) return null; // 未播放的知乎 GIF 只有 JPG 封面，不误开。
+            const url = realUrl(img);
+            return url ? { type: 'image', url } : null;
+        };
+        const shouldHandle = img => {
+            if (!img || !img.closest(contentSelector) || img.closest('a[href]')) return false;
+            if (img.closest('.GifPlayer')) return false;
+            const cls = String(img.className || '').toLowerCase();
+            if (['avatar', 'icon', 'emoji', 'button', 'logo'].some(word => cls.includes(word))) return false;
+            for (let el = img.parentElement, depth = 0; el && depth < 5; el = el.parentElement, depth++) {
+                if (String(el.className || '').toLowerCase().includes('avatar')) return false;
+            }
+            const width = img.naturalWidth || img.width, height = img.naturalHeight || img.height;
+            return !((width > 0 && width < 50) || (height > 0 && height < 50)) && Boolean(mediaInfo(img));
+        };
+        const collect = img => {
+            const root = img.closest(contentSelector);
+            if (!root) return [];
+            const seen = new Set(), result = [];
+            root.querySelectorAll('img').forEach(candidate => {
+                if (!shouldHandle(candidate)) return;
+                const item = mediaInfo(candidate), key = item && `${item.type}\u0000${item.url}`;
+                if (key && !seen.has(key)) { seen.add(key); result.push(item); }
+            });
+            return result;
+        };
+        const update = () => { if (stage) stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; if (media) media.style.rotate = `${rotate}deg`; };
+        const reset = () => { scale = 1; x = 0; y = 0; rotate = 0; update(); };
+        const render = item => {
+            media?.remove();
+            media = document.createElement('img');
+            media.src = item.url;
+            media.style.cssText = 'display:block;max-width:90vw;max-height:90vh;width:auto;height:auto;pointer-events:none;';
+            media.onload = reset;
+            stage.appendChild(media);
+        };
+        const close = () => {
+            if (!overlay) return;
+            const old = overlay; old.removeEventListener('wheel', onWheel); old.removeEventListener('mousedown', onDown); old.remove();
+            document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.removeEventListener('keydown', onKey);
+            overlay = stage = media = null; items = []; index = -1; counter = null; dragging = false;
+        };
+        const switchItem = delta => { if (!items.length) return; index = (index + delta + items.length) % items.length; render(items[index]); if (counter) counter.textContent = `${index + 1} / ${items.length}`; };
+        let counter;
+        const open = (item, list, start) => {
+            close(); items = list.length ? list : [item]; index = start < 0 ? 0 : start; counter = null;
+            overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;cursor:grab;';
+            stage = document.createElement('div'); stage.style.cssText = 'position:relative;display:inline-block;'; overlay.appendChild(stage);
+            const bar = document.createElement('div'); bar.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:7px 12px;border-radius:24px;background:rgba(0,0,0,.65);color:#fff;z-index:1;';
+            const button = (text, title, fn) => { const b = document.createElement('button'); b.textContent = text; b.title = title; b.style.cssText = 'border:0;border-radius:50%;width:30px;height:30px;cursor:pointer;'; b.onclick = fn; bar.appendChild(b); };
+            button('‹', '上一张（左方向键）', () => switchItem(-1));
+            counter = document.createElement('span'); bar.appendChild(counter);
+            button('›', '下一张（右方向键）', () => switchItem(1));
+            button('↻', '旋转（R）', () => { rotate = (rotate + 90) % 360; update(); });
+            overlay.appendChild(bar); document.body.appendChild(overlay); if (counter) counter.textContent = `${index + 1} / ${items.length}`; render(items[index]);
+            overlay.addEventListener('wheel', onWheel, { passive: false }); overlay.addEventListener('mousedown', onDown); overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+            document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.addEventListener('keydown', onKey);
+        };
+        const onWheel = event => { event.preventDefault(); scale = Math.max(.3, Math.min(5, scale + (event.deltaY > 0 ? -.1 : .1))); update(); };
+        const onDown = event => { if (event.target !== overlay && event.target !== stage) return; dragging = true; startX = event.clientX; startY = event.clientY; originX = x; originY = y; };
+        const onMove = event => { if (!dragging) return; x = originX + event.clientX - startX; y = originY + event.clientY - startY; update(); };
+        const onUp = () => { dragging = false; };
+        const onKey = event => { if (event.key === 'Escape') close(); else if (event.key === 'ArrowLeft') switchItem(-1); else if (event.key === 'ArrowRight') switchItem(1); else if (event.key.toLowerCase() === 'r') { rotate = (rotate + 90) % 360; update(); } };
+
+        document.addEventListener('click', event => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.defaultPrevented) return;
+            const img = event.target instanceof Element ? event.target.closest('img') : null;
+            if (!shouldHandle(img)) return;
+            const item = mediaInfo(img), list = collect(img), start = list.findIndex(entry => entry.type === item.type && entry.url === item.url);
+            event.preventDefault(); event.stopPropagation(); open(item, list, start);
+        }, true);
     }
 
     function hideTitle() {
