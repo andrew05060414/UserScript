@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化
-// @version      1.5.23
+// @version      1.5.24
 // @author       X.I.U
 // @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
@@ -217,7 +217,7 @@ html[data-theme=light] .AppHeader-notifications:not([aria-label=通知])>div:fir
 @media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Topstory-container {width: 97% !important;}}
 `,
             style_widescreenDisplayQuestion = `/* 宽屏显示 - 问题页 */
-.Question-mainColumn, .ListShortcut, .QuestionWaiting-mainColumn {width: inherit !important;}
+.Question-mainColumn, .ListShortcut, .QuestionWaiting-mainColumn {width: 100% !important;}
 .Question-mainColumn+div,[data-za-detail-view-path-module="RightSideBar"], .Question-sideColumn, .GlobalSideBar {display: none !important;}
 .QuestionWaiting-mainColumn {margin-right: 0 !important;}
 .Question-main {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
