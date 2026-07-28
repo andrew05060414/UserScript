@@ -74,11 +74,11 @@ registerMenuCommand();
 
 // 注册脚本菜单
 function registerMenuCommand() {
-    if (menu_ID.length > menu_ALL.length){ // 如果菜单ID数组多于菜单数组，说明不是首次添加菜单，需要卸载所有脚本菜单
-        for (let i=0;i<menu_ID.length;i++){
-            GM_unregisterMenuCommand(menu_ID[i]);
-        }
+    // menu_switch() 会重新注册菜单；先移除上一轮注册的 ID，避免菜单项重复累积。
+    for (const id of menu_ID) {
+        if (id !== undefined && id !== null) GM_unregisterMenuCommand(id);
     }
+    menu_ID.length = 0;
     for (let i=0;i<menu_ALL.length;i++){ // 循环注册脚本菜单
         menu_ALL[i][3] = GM_getValue(menu_ALL[i][0]);
         if (menu_ALL[i][0] === 'menu_blockLowCount') {
@@ -182,6 +182,7 @@ function getCollapsedAnswerObserver() {
     if (!window._collapsedAnswerObserver) {
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
+                if (mutation.target.nodeType !== Node.ELEMENT_NODE) continue;
                 if (mutation.target.hasAttribute('script-collapsed')) return
                 // 短的回答
                 if (mutation.target.classList.contains('RichContent')) {
@@ -199,7 +200,7 @@ function getCollapsedAnswerObserver() {
                     }
                 // 长的回答
                 } else if (mutation.target.tagName === 'DIV' && !mutation.target.style.cssText && !mutation.target.className) {
-                    if (mutation.target.parentElement.hasAttribute('script-collapsed')) return
+                    if (mutation.target.parentElement?.hasAttribute('script-collapsed')) return
                     //console.log('222',mutation.target, mutation.target.querySelector('.ContentItem-actions.Sticky [data-zop-retract-question]'))
                     const button = mutation.target.querySelector('.ContentItem-actions.Sticky [data-zop-retract-question]');
                     if (button) {
@@ -246,10 +247,12 @@ function defaultCollapsedAnswer() {
 function collapsedAnswer() {
     if (!menu_value('menu_collapsedAnswer')) return
     //console.log('1111', document.querySelector('.CornerAnimayedFlex'))
-    if (document.querySelector('.CornerAnimayedFlex') && !document.getElementById('collapsed-button')) {
+    const corner = document.querySelector('.CornerAnimayedFlex');
+    const cornerButton = corner?.querySelector(':scope > button');
+    if (corner && cornerButton && !document.getElementById('collapsed-button')) {
         // 向网页中插入收起全部回答按钮+样式+绑定点击事件
         document.head.appendChild(document.createElement('style')).textContent = '.CornerButton{margin-bottom:8px !important;}.CornerButtons{bottom:45px !important;}';
-        document.querySelector('.CornerAnimayedFlex').insertAdjacentHTML('afterBegin', '<button id="collapsed-button" data-tooltip="收起全部回答/评论" data-tooltip-position="left" data-tooltip-will-hide-on-click="false" aria-label="收起全部回答/评论" type="button" class="' + document.querySelector('.CornerAnimayedFlex>button').className + '"><svg class="ContentItem-arrowIcon is-active" aria-label="收起全部回答/评论" fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M16.036 19.59a1 1 0 0 1-.997.995H9.032a.996.996 0 0 1-.997-.996v-7.005H5.03c-1.1 0-1.36-.633-.578-1.416L11.33 4.29a1.003 1.003 0 0 1 1.412 0l6.878 6.88c.782.78.523 1.415-.58 1.415h-3.004v7.005z"></path></svg></button>');
+        corner.insertAdjacentHTML('afterBegin', '<button id="collapsed-button" data-tooltip="收起全部回答/评论" data-tooltip-position="left" data-tooltip-will-hide-on-click="false" aria-label="收起全部回答/评论" type="button" class="' + cornerButton.className + '"><svg class="ContentItem-arrowIcon is-active" aria-label="收起全部回答/评论" fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M16.036 19.59a1 1 0 0 1-.997.995H9.032a.996.996 0 0 1-.997-.996v-7.005H5.03c-1.1 0-1.36-.633-.578-1.416L11.33 4.29a1.003 1.003 0 0 1 1.412 0l6.878 6.88c.782.78.523 1.415-.58 1.415h-3.004v7.005z"></path></svg></button>');
         document.getElementById('collapsed-button').onclick = function () {
 
             // 收起所有评论（悬浮的 [收起评论]）
@@ -293,9 +296,11 @@ function collapsedAnswer() {
 
 // 收起当前回答、评论（监听点击事件，点击网页两侧空白处）
 function collapsedNowAnswer(selectors) {
+    const root = document.querySelector(selectors);
+    if (!root) return;
     backToTop(selectors) // 快捷回到顶部
     if (!menu_value('menu_collapsedNowAnswer')) return
-    document.querySelector(selectors).onclick = function(event){
+    root.onclick = function(event){
         if (event.target == this) {
             // 下面这段主要是 [收起回答]，顺便 [收起评论]（如果展开了的话）
             let rightButton = document.querySelector('.ContentItem-actions.Sticky.RichContent-actions.is-fixed.is-bottom')
@@ -419,7 +424,9 @@ function collapsedNowAnswer(selectors) {
 // 回到顶部（监听点击事件，鼠标右键点击网页两侧空白处）
 function backToTop(selectors) {
     if (!menu_value('menu_backToTop')) return
-    document.querySelector(selectors).oncontextmenu = function(event){
+    const root = document.querySelector(selectors);
+    if (!root) return;
+    root.oncontextmenu = function(event){
         if (event.target == this) {
             event.preventDefault();
             window.scrollTo(0,0)
@@ -483,7 +490,7 @@ function blockLowCount(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     if (target.className === className2) {
                         blockLowCount_1(target,menuUpvote,'upvote_num');
                         blockLowCount_1(target,menuComment,'comment_num');
@@ -500,7 +507,13 @@ function blockLowCount(type) {
         if (GM_getValue(menu)) {
             let item_ContentItem = item.querySelector('.ContentItem')
             if (item_ContentItem && item_ContentItem.dataset.zaExtraModule) {
-                let item2 = JSON.parse(item_ContentItem.dataset.zaExtraModule);
+                let item2;
+                try {
+                    item2 = JSON.parse(item_ContentItem.dataset.zaExtraModule);
+                } catch (error) {
+                    console.warn('解析信息流数据失败', error);
+                    return;
+                }
                 //console.log(item2)
                 if (item2 && item2.card.content && Number(item2.card.content[type]) < Number(GM_getValue(menu))) {
                     console.log('已屏蔽' + (type === 'upvote_num' ? '低赞':'低评') + (item_ContentItem.classList.contains('AnswerItem') ? '回答':'文章') + '：', item2.card.content[type] + '<' + GM_getValue(menu), item);
@@ -564,8 +577,8 @@ function blockUsers(type) {
                 let item = item1.querySelector('.ContentItem.AnswerItem, .ContentItem.ArticleItem'); // 用户名所在元素
                 if (item) {
                     for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                        if (keyword != '' && item.dataset.zop.indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
-                            console.log('已屏蔽：' + item.dataset.zop);
+                        if (keyword != '' && (item.dataset.zop || '').indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
+                            console.log('已屏蔽：' + (item.dataset.zop || ''));
                             item1.hidden = true;
                             break;
                         }
@@ -583,13 +596,13 @@ function blockUsers(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     if (target.className === className2) {
                         let item = target.querySelector('.ContentItem.AnswerItem, .ContentItem.ArticleItem'); // 用户名所在元素
                         if (item) {
                             for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                                if (keyword != '' && item.dataset.zop.indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
-                                    console.log('已屏蔽：' + item.dataset.zop);
+                                if (keyword != '' && (item.dataset.zop || '').indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
+                                    console.log('已屏蔽：' + (item.dataset.zop || ''));
                                     target.hidden = true;
                                     break;
                                 }
@@ -608,13 +621,13 @@ function blockUsers(type) {
         const blockUsers_question_ = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     if (target.className === 'List-item' || target.className === 'Card AnswerCard') {
                         let item1 = target.querySelector('.ContentItem.AnswerItem');
                         if (item1) {
                             menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                                if (item1.dataset.zop.indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                                    console.log('已屏蔽：' + item1.dataset.zop)
+                                if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
+                                    console.log('已屏蔽：' + (item1.dataset.zop || ''))
                                     target.hidden = true;
                                 }
                             })
@@ -627,13 +640,13 @@ function blockUsers(type) {
         const blockUsers_question_answer_ = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     target.querySelectorAll('.List-item, .Card.AnswerCard').forEach(function(item){
                         let item1 = item.querySelector('.ContentItem.AnswerItem');
                         if (item1) {
                             menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                                if (item1.dataset.zop.indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                                    console.log('已屏蔽：' + item1.dataset.zop)
+                                if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
+                                    console.log('已屏蔽：' + (item1.dataset.zop || ''))
                                     item.hidden = true;
                                 }
                             })
@@ -656,8 +669,8 @@ function blockUsers(type) {
             let item1 = item.querySelector('.ContentItem.AnswerItem');
             if (item1) {
                 menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                    if (item1.dataset.zop.indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                        console.log('已屏蔽：' + item1.dataset.zop)
+                    if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
+                        console.log('已屏蔽：' + (item1.dataset.zop || ''))
                         item.hidden = true;
                     }
                 })
@@ -691,7 +704,7 @@ function blockUsers(type) {
             if (location.search.indexOf('type=content') === -1) return // 目前只支持搜索页的 [综合]
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     let item = target.querySelector('.Card.SearchResult-Card[data-za-detail-view-path-module="AnswerItem"] .RichText.ztext.CopyrightRichText-richText b, .Card.SearchResult-Card[data-za-detail-view-path-module="PostItem"] .RichText.ztext.CopyrightRichText-richText b');
                     if (item) {
                         for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
@@ -713,7 +726,7 @@ function blockUsers(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     //console.log(target)
                     if (target.tagName == 'DIV' && target.className.indexOf('css-') == 0 && target.dataset.id == undefined) {
                         let item = target.querySelector('a[href^="https://www.zhihu.com/people/"]>img.Avatar[alt][loading]')
@@ -751,7 +764,7 @@ function blockUsers(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     //console.log(target, target.className)
                     if (target.tagName == 'DIV' && target.className && (target.className.indexOf('css-') == 0 || target.style == 'opacity: 1;')) {
                         const item = target.querySelector('.MemberButtonGroup.ProfileButtonGroup.HoverCard-buttons'),
@@ -759,7 +772,7 @@ function blockUsers(type) {
                         if (item1) {
                             const name = item1.textContent, userid = item1.href.split('/')[4], users = menu_value('menu_customBlockUsers');
                             for (let num = 0;num<users.length;num++) { // 判断是否已存在
-                                if (users[num] === name) { // 已存在
+                                if (item && users[num] === name) { // 已存在
                                     target.querySelectorAll('.Button.Button--primary.Button--red').forEach(function(item){item.style.display = 'none';}) // 隐藏知乎自带的已屏蔽按钮
                                     item.insertAdjacentHTML('afterbegin', `<button type="button" data-name="${name}" data-userid="${userid}" class="Button FollowButton Button--primary Button--red"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 已屏蔽</button>`);
                                     item.firstElementChild.onclick = function(){this.disabled = true;blockUsers_button_del(this.dataset.name, this.dataset.userid, false)}
@@ -782,9 +795,11 @@ function blockUsers(type) {
     // 添加屏蔽用户按钮（用户主页）
     function blockUsers_button_people() {
         let item = document.querySelector('.MemberButtonGroup.ProfileButtonGroup.ProfileHeader-buttons'), // 获取按钮元素位置
-            name = document.querySelector('.ProfileHeader-name').firstChild.textContent, // 获取用户名
+            name_dom = document.querySelector('.ProfileHeader-name'), // 获取用户名
             users = menu_value('menu_customBlockUsers'), // 读取屏蔽列表
             userid = location.href.split('/')[4];
+        if (!item || !name_dom || !name_dom.firstChild) return;
+        let name = name_dom.firstChild.textContent;
         for (let num = 0;num<users.length;num++) { // 判断是否已存在
             if (users[num] === name) { // 已存在
                 document.querySelectorAll('.Button.Button--primary.Button--red').forEach(function(item){item.style.display = 'none';}) // 隐藏知乎自带的已屏蔽按钮
@@ -964,7 +979,7 @@ function blockKeywords(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     if (target.className === className2) {blockKeywords_1(target, 'h2.ContentItem-title meta[itemprop="name"], meta[itemprop="headline"]');}
                 }
             }
@@ -989,7 +1004,7 @@ function blockKeywords(type) {
             if (location.search.indexOf('type=content') === -1) return // 目前只支持搜索页的 [综合]
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     //console.log(target)
                     if (target.tagName === 'DIV' && target.className === '') {
                         let tt = target.querySelector('div[class="Card SearchResult-Card"][data-za-detail-view-path-module="AnswerItem"], div[class="Card SearchResult-Card"][data-za-detail-view-path-module="PostItem"]')
@@ -1023,7 +1038,7 @@ function blockKeywords(type) {
         const callback = (mutationsList, observer) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) return
+                    if (target.nodeType != 1) continue
                     //console.log(target);
                     if (target.tagName == 'DIV' && target.className.indexOf('css-') == 0 && target.dataset.id == undefined) {
                         let item = target.querySelector('a[href^="https://www.zhihu.com/people/"]>img.Avatar[alt][loading]')
@@ -1071,7 +1086,7 @@ function blockType(type) {
     // 一开始加载的信息流 + 添加标签样式
     if (type === 'search') { // 搜索页
         if (!menu_value('menu_blockTypeVideo') && !menu_value('menu_blockTypeArticle') && !menu_value('menu_blockTypePin') && !menu_value('menu_blockTypeTopic') && !menu_value('menu_blockTypeSearch')) return
-        if (menu_value('menu_blockTypeSearch') && location.pathname === '/search') setTimeout(function(){document.querySelectorAll('.RelevantQuery').forEach((r)=>{r.parentElement.parentElement.hidden = true});}, 2000)
+        if (menu_value('menu_blockTypeSearch') && location.pathname === '/search') setTimeout(function(){document.querySelectorAll('.RelevantQuery').forEach((r)=>{r.parentElement?.parentElement && (r.parentElement.parentElement.hidden = true)});}, 2000)
         name = 'h2.ContentItem-title a:not(.zhihu_e_toQuestion), a.KfeCollection-PcCollegeCard-link, h2.SearchTopicHeader-Title a'
         addSetInterval_(name);
     } else if (type === 'question') { // 问题页
@@ -1097,7 +1112,7 @@ function blockType(type) {
     const observer = new MutationObserver(mutationsList => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
+                if (target.nodeType != 1) continue
                 if (target.className === "Card SearchResult-Card" && target.dataset.zaDetailViewPathModule === undefined) {
                     // 移除相关搜索
                     if (menu_value('menu_blockTypeSearch') && location.pathname === '/search' && location.search.indexOf('type=content') > -1) target.hidden = true;
@@ -1112,45 +1127,53 @@ function blockType(type) {
     window.addEventListener('urlchange', function(){
         addSetInterval_(name);
         // 移除相关搜索
-        if (menu_value('menu_blockTypeSearch') && location.pathname === '/search' && location.search.indexOf('type=content') > -1) setTimeout(function(){document.querySelectorAll('.RelevantQuery').forEach((r)=>{r.parentElement.parentElement.hidden = true});}, 1500)
+        if (menu_value('menu_blockTypeSearch') && location.pathname === '/search' && location.search.indexOf('type=content') > -1) setTimeout(function(){document.querySelectorAll('.RelevantQuery').forEach((r)=>{r.parentElement?.parentElement && (r.parentElement.parentElement.hidden = true)});}, 1500)
     })
 
     function blockType_(titleA) {
         if (!titleA) return // 判断是否为真
+        const parent = (className) => findParentElement(titleA, className);
+        const hide = (className, remove = false) => {
+            const element = parent(className);
+            if (!element) return null;
+            remove ? element.remove() : element.hidden = true;
+            return element;
+        };
         //console.log(titleA.href)
         if (location.pathname === '/search') { // 搜索页
             if (location.search.indexOf('type=content') === -1) return //   仅限搜索页的 [综合]
             if (titleA.href.indexOf('/zvideo/') > -1 || titleA.href.indexOf('video.zhihu.com') > -1) { // 如果是视频
-                if (menu_value('menu_blockTypeVideo')) findParentElement(titleA, 'Card').remove();
+                if (menu_value('menu_blockTypeVideo')) hide('Card', true);
             } else if (titleA.href.indexOf('zhuanlan.zhihu.com') > -1) { // 如果是文章
-                if (menu_value('menu_blockTypeArticle')) findParentElement(titleA, 'Card SearchResult-Card').hidden = true;
+                if (menu_value('menu_blockTypeArticle')) hide('Card SearchResult-Card');
             } else if (titleA.href.indexOf('/topic/') > -1) { //            如果是话题
-                if (menu_value('menu_blockTypeTopic')) findParentElement(titleA, 'Card SearchResult-Card').hidden = true;
+                if (menu_value('menu_blockTypeTopic')) hide('Card SearchResult-Card');
             } else if (titleA.href.indexOf('/market/') > -1) { //           如果是杂志文章等乱七八糟的
-                if (menu_value('menu_blockTypeSearch')) findParentElement(titleA, 'Card SearchResult-Card').hidden = true;
+                if (menu_value('menu_blockTypeSearch')) hide('Card SearchResult-Card');
             }
         } else if (location.pathname.indexOf('/question/') > -1) { // 问题页
-            if (menu_value('menu_blockTypeVideo')) findParentElement(titleA, 'List-item').hidden = true;
+            if (menu_value('menu_blockTypeVideo')) hide('List-item');
         } else if (location.pathname.indexOf('/follow') > -1) { // 首页 - 关注
             if (type === 'follow') {
-                if ((menu_value('menu_blockTypeFollowAgree') && titleA.className.indexOf('FeedSource-byline') != -1) || (menu_value('menu_blockTypeFollowQuestion') && titleA.dataset.zaDetailViewPathModule == 'QuestionItem')) findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isFollow').hidden = true; // 赞同了XX + 关注了XX
+                if ((menu_value('menu_blockTypeFollowAgree') && titleA.className.indexOf('FeedSource-byline') != -1) || (menu_value('menu_blockTypeFollowQuestion') && titleA.dataset.zaDetailViewPathModule == 'QuestionItem')) hide('Card TopstoryItem TopstoryItem-isFollow'); // 赞同了XX + 关注了XX
             }
-            if (titleA.className == 'ContentItem PinItem' && menu_value('menu_blockTypePin')) findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isFollow').hidden = true; // 如果是想法
+            if (titleA.className == 'ContentItem PinItem' && menu_value('menu_blockTypePin')) hide('Card TopstoryItem TopstoryItem-isFollow'); // 如果是想法
         } else { // 首页
             if (titleA.className == 'ContentItem PinItem') { // 如果是想法（针对无标题）
-                if (menu_value('menu_blockTypePin')) findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true;
+                if (menu_value('menu_blockTypePin')) hide('Card TopstoryItem TopstoryItem-isRecommend');
             /*} else if (titleA.href.indexOf('/pin/') > -1) { // 如果是想法
-                if (menu_value('menu_blockTypePin')) findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true;*/
+                if (menu_value('menu_blockTypePin')) hide('Card TopstoryItem TopstoryItem-isRecommend');*/
             } else if (titleA.href.indexOf('/zvideo/') > -1 || titleA.href.indexOf('video.zhihu.com') > -1) { // 如果是视频
-                if (menu_value('menu_blockTypeVideo')) {findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true;}
+                if (menu_value('menu_blockTypeVideo')) hide('Card TopstoryItem TopstoryItem-isRecommend');
             } else if (titleA.href.indexOf('/answer/') > -1) { //           如果是问题（视频回答）
-                if (findParentElement(titleA, 'ContentItem AnswerItem').querySelector('.VideoAnswerPlayer')) {
-                    if (menu_value('menu_blockTypeVideo')) {findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true; findParentElement(titleA, 'ContentItem AnswerItem').remove();}
+                const answer = parent('ContentItem AnswerItem');
+                if (answer?.querySelector('.VideoAnswerPlayer')) {
+                    if (menu_value('menu_blockTypeVideo')) {hide('Card TopstoryItem TopstoryItem-isRecommend'); answer.remove();}
                 }
             } else if (titleA.href.indexOf('/education/video-course/') > -1) { // 如果是视频课程
-                if (menu_value('menu_blockTypeVideo')) {findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true;}
+                if (menu_value('menu_blockTypeVideo')) hide('Card TopstoryItem TopstoryItem-isRecommend');
             } else if (titleA.href.indexOf('zhuanlan.zhihu.com') > -1) { // 如果是文章
-                if (menu_value('menu_blockTypeArticle')) findParentElement(titleA, 'Card TopstoryItem TopstoryItem-isRecommend').hidden = true;
+                if (menu_value('menu_blockTypeArticle')) hide('Card TopstoryItem TopstoryItem-isRecommend');
             }
         }
     }
@@ -1162,7 +1185,7 @@ function blockType(type) {
                 clearInterval(timer);
                 aTag.forEach(function(item){blockType_(item);})
             }
-        });
+        }, 300);
     }
 }
 
@@ -1198,9 +1221,9 @@ function cleanHighlightLink() {
     const callback = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1 || target.tagName != 'A') break
+                if (target.nodeType != 1 || target.tagName != 'A') continue
                 if (target.dataset.zaNotTrackLink && target.href.indexOf('https://zhida.zhihu.com/search?') > -1) {
-                    target.parentElement.replaceWith(target.textContent);
+                    if (target.parentElement) target.parentElement.replaceWith(target.textContent);
                 }
             }
         }
@@ -1219,7 +1242,7 @@ function blockYanXuan() {
     const blockYanXuan_question = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
+                if (target.nodeType != 1) continue
                 if (target.className === 'List-item' || target.className === 'Card AnswerCard') {
                     if (target.querySelector('.KfeCollection-AnswerTopCard-Container, .KfeCollection-PurchaseBtn')) {
                         target.hidden = true;
@@ -1232,7 +1255,7 @@ function blockYanXuan() {
     const blockYanXuan_question_answer = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
+                if (target.nodeType != 1) continue
                 target.querySelectorAll('.List-item, .Card.AnswerCard').forEach(function(item){
                     if (item.querySelector('.KfeCollection-AnswerTopCard-Container, .KfeCollection-PurchaseBtn')) {
                         item.hidden = true;
@@ -1291,7 +1314,7 @@ function addToQuestion() {
     const observer = new MutationObserver(mutationsList => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
+                if (target.nodeType != 1) continue
                 addTypeTips_(target.querySelector('h2.ContentItem-title a:not(.zhihu_e_tips)'));
             }
         }
@@ -1322,7 +1345,7 @@ function addToQuestion() {
                 clearInterval(timer);
                 aTag.forEach(function(item){addTypeTips_(item);})
             }
-        });
+        }, 300);
     }
 }
 
@@ -1339,7 +1362,7 @@ function removeLogin() {
     const removeLoginModal = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
+                if (target.nodeType != 1) continue
                 if (target.querySelector('.signFlowModal')) {
                     let button = target.querySelector('.Button.Modal-closeButton.Button--plain');
                     if (button) button.click();
@@ -1373,6 +1396,7 @@ function cleanTitles() {
 
     // 方案一
     const elTitle = document.head.querySelector('title');
+    if (!elTitle) return;
     const original = elTitle.textContent;
     const observer = new MutationObserver(function() {
         if (elTitle.textContent != original) { // 避免重复执行
@@ -1405,12 +1429,26 @@ function cleanTitles() {
 function cleanSearch() {
     if (!menu_value('menu_cleanSearch')) return
 
-    const el = document.querySelector('.SearchBar-input > input');
-    const observer = new MutationObserver((mutationsList, observer) => {
-        if (mutationsList[0].attributeName === 'placeholder' && mutationsList[0].target.placeholder != '') mutationsList[0].target.placeholder = '';
+    let input = document.querySelector('.SearchBar-input > input');
+    const clearPlaceholder = () => {
+        if (input && !input.isConnected) input = null;
+        if (!input) input = document.querySelector('.SearchBar-input > input');
+        if (input && input.placeholder) input.placeholder = '';
+    };
+    const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+            if (mutation.type === 'attributes' && mutation.target === input) {
+                clearPlaceholder();
+                return;
+            }
+            if (mutation.type === 'childList' && (!input || !input.isConnected)) {
+                clearPlaceholder();
+                if (input) return;
+            }
+        }
     });
-    el.placeholder = '';
-    observer.observe(el, { attributes: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['placeholder'] });
+    clearPlaceholder();
     document.documentElement.appendChild(document.createElement('style')).textContent = '.AutoComplete-group > .SearchBar-label:not(.SearchBar-label--history), .AutoComplete-group > [id^="AutoComplete2-topSearch-"], .AutoComplete-group > [id^="AutoComplete3-topSearch-"] {display: none !important;}';
 }
 
@@ -1420,9 +1458,10 @@ function closeFloatingComments() {
     const closeFloatingCommentsModal = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.nodeType != 1) return
-                let button = document.querySelector('button[aria-label="关闭"]');
-                if (button) {button.parentElement.parentElement.onclick = function(event){if (event.target.parentElement == this) {button.click();}}}
+                if (target.nodeType != 1) continue
+                const button = target.matches?.('button[aria-label="关闭"]') ? target : target.querySelector?.('button[aria-label="关闭"]');
+                const container = button?.parentElement?.parentElement;
+                if (button && container) container.onclick = function(event){if (event.target.parentElement == this) {button.click();}};
             }
         }
     };
@@ -1479,11 +1518,40 @@ function getXpath(xpath, contextNode, doc = document) {
 // 显示问题作者
 function question_author() {
     if (document.querySelector('.BrandQuestionSymbol, .QuestionAuthor, .SpecialQuestionAuthor')) return
-    let qJson = JSON.parse(document.querySelector('#js-initialData').textContent).initialState.entities.questions[/\d+/.exec(location.pathname)[0]].author,
-        html = `<div class="BrandQuestionSymbol"><a class="BrandQuestionSymbol-brandLink" href="/people/${qJson.urlToken}"><img role="presentation" src="${qJson.avatarUrl}" class="BrandQuestionSymbol-logo" alt=""><span class="BrandQuestionSymbol-name">${qJson.name}</span></a><div class="BrandQuestionSymbol-divider" style="margin-left: 5px;margin-right: 10px;"></div></div>`;
-        //html = `<div class="QuestionAuthor"><div class="AuthorInfo AuthorInfo--plain" itemprop="author" itemscope="" itemtype="http://schema.org/Person"><div class="AuthorInfo"><span class="UserLink AuthorInfo-avatarWrapper"><div class="Popover"><div id="Popover18-toggle" aria-haspopup="true" aria-expanded="false" aria-owns="Popover18-content"><a class="UserLink-link" data-za-detail-view-element_name="User" target="_blank" href="${qJson.urlToken}"><img class="Avatar AuthorInfo-avatar" width="24" height="24" src="${qJson.avatarUrl}"></a></div></div></span><div class="AuthorInfo-content"><div class="AuthorInfo-head"><span class="UserLink AuthorInfo-name"><div class="Popover"><div id="Popover19-toggle" aria-haspopup="true" aria-expanded="false" aria-owns="Popover19-content"><a class="UserLink-link" data-za-detail-view-element_name="User" target="_blank" href="${qJson.urlToken}">${qJson.name}</a></div></div></span></div></div></div></div></div>`
-    document.querySelector('.QuestionHeader-topics').insertAdjacentHTML('beforebegin', html);
-    //document.querySelector('.QuestionPage h1.QuestionHeader-title').insertAdjacentHTML('afterend', html);
+    const initialData = document.querySelector('#js-initialData');
+    const questionId = /\d+/.exec(location.pathname)?.[0];
+    const topics = document.querySelector('.QuestionHeader-topics');
+    if (!initialData || !questionId || !topics) return;
+
+    let qJson;
+    try {
+        qJson = JSON.parse(initialData.textContent).initialState.entities.questions[questionId]?.author;
+    } catch (error) {
+        console.warn('读取问题作者信息失败', error);
+        return;
+    }
+    if (!qJson?.urlToken || !qJson.name) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'BrandQuestionSymbol';
+    const link = document.createElement('a');
+    link.className = 'BrandQuestionSymbol-brandLink';
+    link.href = `/people/${encodeURIComponent(qJson.urlToken)}`;
+    const avatar = document.createElement('img');
+    avatar.role = 'presentation';
+    avatar.src = qJson.avatarUrl || '';
+    avatar.className = 'BrandQuestionSymbol-logo';
+    avatar.alt = '';
+    const name = document.createElement('span');
+    name.className = 'BrandQuestionSymbol-name';
+    name.textContent = qJson.name;
+    link.append(avatar, name);
+    const divider = document.createElement('div');
+    divider.className = 'BrandQuestionSymbol-divider';
+    divider.style.marginLeft = '5px';
+    divider.style.marginRight = '10px';
+    wrapper.append(link, divider);
+    topics.before(wrapper);
 }
 
 
@@ -1515,20 +1583,24 @@ function topTime_post() {
 
     // 置顶显示时间
     if (menu_value('menu_publishTop') && !(document.querySelector('.Post-Header > .ContentItem-time')) && !(document.querySelector('.ContentItem-meta > .ContentItem-time'))) {
+        const header = document.querySelector('.Post-Header');
+        if (!header) return;
         let temp_time = t.cloneNode(true);
         temp_time.style.padding = '0px';
-        document.querySelector('.Post-Header').insertAdjacentElement('beforeEnd', temp_time);
+        header.insertAdjacentElement('beforeEnd', temp_time);
     }
 }
 
 
 // 完整显示时间
 function topTime_allTime(t) {
+    const link = t.querySelector('a');
+    if (!link) return;
     if (t.textContent.indexOf('发布于') > -1 && t.textContent.indexOf('编辑于') == -1) {
-        t.querySelector('a').textContent = (t.querySelector('a').dataset.tooltip);
+        link.textContent = link.dataset.tooltip || link.textContent;
         t.classList.add('full');
     } else if (t.textContent.indexOf('发布于') == -1 && t.textContent.indexOf('编辑于') > -1) {
-        t.querySelector('a').textContent = (t.querySelector('a').dataset.tooltip) + ' ，' + (t.querySelector('a').textContent);
+        link.textContent = (link.dataset.tooltip || link.textContent) + ' ，' + link.textContent;
         t.classList.add('full');
     }
 }
@@ -1537,6 +1609,7 @@ function topTime_allTime(t) {
 // 置顶显示时间
 function topTime_publishTop(t, _this, _class) {
     if (!menu_value('menu_publishTop')) return
+    if (!t.parentNode || !_this.querySelector('.' + _class)) return;
     if (!t.parentNode.classList.contains(_class)) {
         let temp_time = t.cloneNode(true);
         temp_time.style.padding = '0px';
@@ -1549,9 +1622,16 @@ function topTime_publishTop(t, _this, _class) {
 
 // 问题创建时间
 function question_time() {
-    if (!(document.querySelector('.QuestionPage .QuestionHeader-side .QuestionTime-xiu'))) {
-        document.querySelector('.QuestionPage .QuestionHeader-side').insertAdjacentHTML('beforeEnd', '<div class="QuestionTime-xiu" style="color: #9098ac; margin-top: 5px; font-size: 13px; font-style: italic;"><p>创建时间：' + getUTC8(new Date(document.querySelector('.QuestionPage > meta[itemprop=dateCreated]').content)) + '</p><p>最后编辑：' + getUTC8(new Date(document.querySelector('.QuestionPage > meta[itemprop=dateModified]').content)) + '</p></div>');
-    }
+    if (document.querySelector('.QuestionPage .QuestionHeader-side .QuestionTime-xiu')) return;
+    const side = document.querySelector('.QuestionPage .QuestionHeader-side');
+    const created = document.querySelector('.QuestionPage > meta[itemprop=dateCreated]')?.content;
+    const modified = document.querySelector('.QuestionPage > meta[itemprop=dateModified]')?.content;
+    if (!side || !created || !modified) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'QuestionTime-xiu';
+    wrapper.style.cssText = 'color: #9098ac; margin-top: 5px; font-size: 13px; font-style: italic;';
+    wrapper.innerHTML = `<p>创建时间：${getUTC8(new Date(created))}</p><p>最后编辑：${getUTC8(new Date(modified))}</p>`;
+    side.append(wrapper);
 }
 
 
@@ -1563,13 +1643,25 @@ function getUTC8(t) {
 
 // 默认高清原图（无水印）
 function originalPic(){
-    document.querySelectorAll('img[data-original][data-original-token][data-lazy-status]:not([data-original-xiu]):not(.comment_sticker):not(.Avatar)').forEach(function(one){one.src = 'https://' + one.dataset.original.split('/')[2] + '/' + one.dataset.originalToken + '.webp'; one.dataset.originalXiu = 'true';});
+    document.querySelectorAll('img[data-original][data-original-token][data-lazy-status]:not([data-original-xiu]):not(.comment_sticker):not(.Avatar)').forEach(function(one){
+        const parts = one.dataset.original.split('/');
+        if (!parts[2] || !one.dataset.originalToken) return;
+        one.src = 'https://' + parts[2] + '/' + one.dataset.originalToken + '.webp';
+        one.dataset.originalXiu = 'true';
+    });
 }
 
 
 // 默认站外直链，修改自：https://greasyfork.org/scripts/402808（从 JQuery 改为原生 JavaScript，且精简、优化了代码）
 function directLink () {
-    document.querySelectorAll('a.external[href*="link.zhihu.com/?target="], a.LinkCard[href*="link.zhihu.com/?target="]:not(.MCNLinkCard):not(.ZVideoLinkCard):not(.ADLinkCardContainer)').forEach(function (_this) {_this.href = decodeURIComponent(_this.href.substring(_this.href.indexOf('link.zhihu.com/?target=') + 23));});
+    document.querySelectorAll('a.external[href*="link.zhihu.com/?target="], a.LinkCard[href*="link.zhihu.com/?target="]:not(.MCNLinkCard):not(.ZVideoLinkCard):not(.ADLinkCardContainer)').forEach(function (_this) {
+        try {
+            const target = new URL(_this.href).searchParams.get('target');
+            if (target) _this.href = target;
+        } catch (error) {
+            console.warn('解析知乎外链失败', _this.href, error);
+        }
+    });
 }
 
 
@@ -1577,11 +1669,17 @@ function directLink () {
 function questionInvitation(){
     let time = setInterval(function(){
         let q = document.querySelector('.QuestionInvitation-content'); if (!q) return
+        const title = document.querySelector('.QuestionInvitation-title');
+        const topbar = document.querySelector('.Topbar');
+        if (!title || !topbar) return;
         clearInterval(time);
         q.style.display = 'none';
-        document.querySelector('.QuestionInvitation-title').innerHTML = document.querySelector('.QuestionInvitation-title').innerText + '<span style="cursor: pointer; font-size: 14px; color: #919aae;"> 展开/折叠</span>'
+        const hint = document.createElement('span');
+        hint.textContent = ' 展开/折叠';
+        hint.style.cssText = 'cursor: pointer; font-size: 14px; color: #919aae;';
+        title.append(hint);
         // 点击事件（展开/折叠）
-        document.querySelector('.Topbar').onclick = function(){
+        topbar.onclick = function(){
             let q = document.querySelector('.QuestionInvitation-content')
             if (q.style.display == 'none') {
                 q.style.display = ''
@@ -1589,7 +1687,7 @@ function questionInvitation(){
                 q.style.display = 'none'
             }
         }
-    });
+    }, 100);
 }
 
 // 屏蔽热榜杂项
@@ -1627,7 +1725,8 @@ function blockHotOther() {
     const blockLive_content = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.classList.contains('.HotItem')) {
+                if (target.nodeType !== 1) continue;
+                if (target.matches('.HotItem') || target.querySelector('.HotItem')) {
                     block();
                 }
             }
@@ -1669,8 +1768,8 @@ function switchHomeRecommend() {
         switchHome(); // 将关注/推荐/热榜/专栏的选项去掉默认的点击事件改成静态链接（针对首页互相切换（知乎这里切换是动态加载的），为了避免功能交叉混乱
         cleanHighlightLink(); //                                               移除高亮链接
         originalPic();directLink(); // 先立即执行一次
-        setInterval(originalPic,500); //                                       默认高清原图（无水印）
-        setInterval(directLink, 500); //                                       默认站外直链
+        setInterval(originalPic,1000); //                                       默认高清原图（无水印）
+        setInterval(directLink, 1000); //                                       默认站外直链
         if (location.hostname != 'zhuanlan.zhihu.com') {
             if (location.pathname.indexOf('/column/') === -1) cleanSearch(); //净化搜索热门
             collapsedAnswer(); //                                              一键收起回答
@@ -1694,14 +1793,14 @@ function switchHomeRecommend() {
                 blockType('question'); //                                      屏蔽指定类别（视频/文章等）
                 defaultCollapsedAnswer(); //                                   默认收起回答
             }
-            setInterval(function(){topTime_('.ContentItem.AnswerItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+            setInterval(function(){topTime_('.ContentItem.AnswerItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
             setTimeout(function(){question_time(); question_author()}, 100); //问题创建时间 + 显示问题作者
             questionInvitation(); //                                           默认折叠邀请
 
         } else if (location.pathname === '/search') { //          搜索结果页 //
             collapsedNowAnswer('main div'); //                                 收起当前回答 + 快捷返回顶部
             collapsedNowAnswer('.Search-container'); //                        收起当前回答 + 快捷返回顶部
-            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'SearchItem-meta')}, 300); // 置顶显示时间
+            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'SearchItem-meta')}, 1000); // 置顶显示时间
             addTypeTips(); //                                                  区分问题文章
             addToQuestion(); //                                                直达问题按钮
             blockUsers('search'); //                                           屏蔽指定用户
@@ -1712,7 +1811,7 @@ function switchHomeRecommend() {
         } else if (location.pathname.indexOf('/topic/') > -1) { //   话题页 //
             if (location.pathname.indexOf('/hot') > -1 || location.href.indexOf('/top-answers') > -1) { // 仅限 [讨论] [精华]
                 collapsedNowAnswer('main.App-main'); //                        收起当前回答 + 快捷返回顶部
-                setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+                setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
                 addTypeTips(); //                                              区分问题文章
                 addToQuestion(); //                                            直达问题按钮
                 blockUsers('topic'); //                                        屏蔽指定用户
@@ -1730,7 +1829,7 @@ function switchHomeRecommend() {
             setTimeout(function(){
                 collapsedAnswer(); //                                           一键收起回答
                 collapsedNowAnswer('main div'); //                              收起当前回答 + 快捷返回顶部
-                setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+                setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
                 blockUsers(); //                                                屏蔽指定用户
             }, 300);
 
@@ -1739,7 +1838,7 @@ function switchHomeRecommend() {
             if (location.pathname.split('/').length === 3) addTypeTips();addToQuestion(); // 区分问题文章、直达问题按钮
             collapsedNowAnswer('main div'); //                                 收起当前回答 + 快捷返回顶部
             collapsedNowAnswer('.Profile-main'); //                            收起当前回答 + 快捷返回顶部
-            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
             blockUsers('people'); //                                           屏蔽指定用户
             blockKeywords('people'); //                                        屏蔽指定关键词
 
@@ -1749,12 +1848,12 @@ function switchHomeRecommend() {
             addToQuestion(); //                                                直达问题按钮
             collapsedNowAnswer('main'); //                                     收起当前回答 + 快捷返回顶部
             collapsedNowAnswer('.CollectionsDetailPage'); //                   收起当前回答 + 快捷返回顶部
-            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+            setInterval(function(){topTime_('.ContentItem.AnswerItem, .ContentItem.ArticleItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
             blockKeywords('collection'); //                                    屏蔽指定关键词
 
         } else if (location.pathname.indexOf('/pin/') > -1) { // 想法 //
             backToTop('main[role=main]'); //                                   快捷返回顶部
-            setInterval(function(){topTime_('.ContentItem.PinItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+            setInterval(function(){topTime_('.ContentItem.PinItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
 
         } else if (['/','/hot','/follow','/column-square','/ring-feeds'].indexOf(location.pathname) !== -1) { //    首页 //
             switchHomeRecommend(); // 针对首页推荐
@@ -1765,7 +1864,7 @@ function switchHomeRecommend() {
             collapsedNowAnswer('.App-main .Topstory'); //                      收起当前回答 + 快捷返回顶部
             collapsedNowAnswer('.App-main .Topstory-container'); //            收起当前回答 + 快捷返回顶部
             if (location.pathname !== '/column-square'){ // 不是首页 - 专栏时
-                setInterval(function(){topTime_('.TopstoryItem', 'ContentItem-meta')}, 300); // 置顶显示时间
+                setInterval(function(){topTime_('.TopstoryItem', 'ContentItem-meta')}, 1000); // 置顶显示时间
                 addTypeTips(); //                                                  区分问题文章
                 addToQuestion(); //                                                直达问题按钮
                 if (location.pathname == '/') { // 推荐
