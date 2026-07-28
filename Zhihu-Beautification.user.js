@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化
-// @version      1.5.24
+// @version      1.5.27
 // @author       X.I.U
 // @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
@@ -12,6 +12,7 @@
 // @grant        GM_openInTab
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_setClipboard
 // @grant        GM_notification
 // @sandbox      JavaScript
 // @license      GPL-3.0 License
@@ -35,7 +36,16 @@
         ['menu_darkMode', '暗黑模式', '暗黑模式', true],
         ['menu_darkModeType', '暗黑模式切换（1~4）', '暗黑模式切换', 1],
         ['menu_darkModeAuto', '暗黑模式跟随浏览器', '暗黑模式跟随浏览器', false],
-        ['menu_picHeight', '调整图片最大高度', '调整图片最大高度', true],
+        ['menu_imageEnhancement', '图片增强', '设置图片最大高度与正文图片查看器功能', ''],
+        ['menu_picHeight', '调整图片最大高度', '限制正文图片最大高度', true],
+        ['menu_imageViewer', '正文图片查看器', '点击正文静态图片后打开查看器', false],
+        ['menu_imageViewerGifNative', 'GIF 使用知乎原生播放', '未获取真实视频源时始终保留知乎原生 GIF 播放', true],
+        ['menu_imageViewerZoom', '启用滚轮缩放', '在查看器中使用滚轮缩放图片', true],
+        ['menu_imageViewerDrag', '启用拖拽移动', '在查看器中拖拽图片位置', true],
+        ['menu_imageViewerRotate', '显示旋转按钮', '在查看器中显示旋转按钮与 R 快捷键', true],
+        ['menu_imageViewerPrevNext', '显示上一张/下一张', '在查看器中显示翻图按钮与方向键', true],
+        ['menu_imageViewerCounter', '显示图片计数', '在查看器中显示当前图片序号', true],
+        ['menu_imageViewerKeyboard', '启用键盘快捷键', '启用 Esc、方向键与 R 快捷键', true],
         ['menu_postimg', '隐藏文章开头大图', '隐藏文章开头大图', true],
         ['menu_hideTitle', '向下翻时自动隐藏顶栏', '向下翻时自动隐藏顶栏', true]
     ], menu_ID = [];
@@ -46,14 +56,16 @@
     addStyle();
     // 向下翻时自动隐藏顶栏
     if (menu_value('menu_hideTitle')) setTimeout(hideTitle, 2000);
+    if (menu_value('menu_imageViewer')) initImageViewer();
+    initCopyMarkdownTitle();
 
     // 注册脚本菜单
     function registerMenuCommand() {
-        if (menu_ID.length > menu_ALL.length){ // 如果菜单ID数组多于菜单数组，说明不是首次添加菜单，需要卸载所有脚本菜单
-            for (let i=0;i<menu_ID.length;i++){
-                GM_unregisterMenuCommand(menu_ID[i]);
-            }
+        // menu_switch() 会重新注册菜单；先移除上一轮注册的 ID，避免菜单项重复累积。
+        for (const id of menu_ID) {
+            if (id !== undefined && id !== null) GM_unregisterMenuCommand(id);
         }
+        menu_ID.length = 0;
         for (let i=0;i<menu_ALL.length;i++){ // 循环注册脚本菜单
             menu_ALL[i][3] = GM_getValue(menu_ALL[i][0]);
             if (menu_ALL[i][0] === 'menu_darkModeType') {
@@ -64,7 +76,9 @@
                 menu_ID[i] = GM_registerMenuCommand(`${menu_num(menu_ALL[i][3])} ${menu_ALL[i][1]}`, function(){menu_toggle(`${menu_ALL[i][3]}`,`${menu_ALL[i][0]}`)});
             } else if (menu_ALL[i][0] === 'menu_widescreenDisplay'){
                     GM_registerMenuCommand(`#️⃣ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7]])});
-            } else if (menu_ALL[i][0].indexOf('menu_widescreenDisplay') === -1) {
+            } else if (menu_ALL[i][0] === 'menu_imageEnhancement'){
+                    GM_registerMenuCommand(`🖼️ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7], menu_ALL[i+8], menu_ALL[i+9]])});
+            } else if (menu_ALL[i][0].indexOf('menu_widescreenDisplay') === -1 && menu_ALL[i][0].indexOf('menu_imageViewer') === -1 && menu_ALL[i][0] !== 'menu_picHeight') {
                 menu_ID[i] = GM_registerMenuCommand(`${menu_ALL[i][3]?'✅':'❌'} ${menu_ALL[i][1]}`, function(){menu_switch(`${menu_ALL[i][3]}`,`${menu_ALL[i][0]}`,`${menu_ALL[i][2]}`)});
             }
         }
@@ -244,10 +258,11 @@ html[data-theme=light] .AppHeader-notifications:not([aria-label=通知])>div:fir
             style_widescreenDisplayPost = `/* 宽屏显示 - 文章页 */
 .Post-content {min-width: auto !important;}
 .Post-SideActions {left: calc(10vw) !important;}
-.Post-Row-Content-right {display: none !important;}
-.Post-Row-Content, .Post-Row-Content-left, .RichContent-actions {width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Post-Row-Content, .Post-Row-Content-left, .RichContent-actions {width: auto !important;}}
-@media only screen and (max-width: ${GM_getValue('menu_widescreenDisplayWidth')-100}px) {.Post-Row-Content, .Post-Row-Content-left, .RichContent-actions {width: 98% !important;}}
+.Post-Row-Content-right, .Post-content > div:has(.Post-Main) > div:nth-child(2) {display: none !important;}
+.Post-Row-Content, .Post-content > div:has(.Post-Main) {box-sizing: border-box !important; width: calc(${GM_getValue('menu_widescreenDisplayWidth')}px + 72px) !important; max-width: 100% !important;}
+.Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child {box-sizing: border-box !important; width: calc(${GM_getValue('menu_widescreenDisplayWidth')}px + 40px) !important; max-width: 100% !important;}
+.Post-Main, .Post-Header, .RichContent-actions {box-sizing: border-box !important; width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important; max-width: 100% !important;}
+@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+122}px) {.Post-Row-Content, .Post-content > div:has(.Post-Main) {width: 98% !important;} .Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child, .Post-Main, .Post-Header, .RichContent-actions {width: 100% !important; max-width: 100% !important;}}
 `,
             style_widescreenDisplayPeople = `/* 宽屏显示 - 用户主页 */
 .Profile-mainColumn {width: inherit !important;}
@@ -483,7 +498,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         if (menu_value('menu_widescreenDisplayQuestion') && location.pathname.indexOf('/question/') > -1) style += style_widescreenDisplayQuestion;
         if (menu_value('menu_widescreenDisplaySearch') && (location.pathname === '/search' || location.pathname.indexOf('/club/') > -1 || location.pathname.indexOf('/topic/') > -1)) style += style_widescreenDisplaySearch;
         if (menu_value('menu_widescreenDisplayCollection') && location.pathname.indexOf('/collection/') > -1) style += style_widescreenDisplayCollection;
-        if (menu_value('menu_widescreenDisplayPost') && location.hostname.indexOf('zhuanlan') > -1 && (location.pathname.indexOf('/edit') === -1 || location.pathname.indexOf('/write') === -1)) style += style_widescreenDisplayPost;
+        if (menu_value('menu_widescreenDisplayPost') && location.hostname.indexOf('zhuanlan') > -1 && location.pathname.indexOf('/edit') === -1 && location.pathname.indexOf('/write') === -1) style += style_widescreenDisplayPost;
         if (menu_value('menu_widescreenDisplayPeople') && location.pathname.indexOf('/people/') > -1) style += style_widescreenDisplayPeople;
 
         // 调整图片最大高度
@@ -499,16 +514,175 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                     clearInterval(timer1); // 取消定时器
                     document.lastChild.appendChild(style_Add).textContent = style;
                 }
-            });
+            }, 10);
         }
+    }
+
+    // 正文图片查看器：只接管非链接的正文静态图片；知乎 GIF 未暴露 video 源时保留原生播放。
+    function initImageViewer() {
+        let overlay, stage, media, items = [], index = -1, scale = 1, x = 0, y = 0, rotate = 0;
+        let dragging = false, startX = 0, startY = 0, originX = 0, originY = 0;
+
+        const contentSelector = '.RichContent, .Post-content, .ztext, .AnswerItem, .QuestionAnswer-content';
+        const realUrl = img => img.getAttribute('data-original') || img.getAttribute('data-actualsrc') || img.currentSrc || img.src;
+        const mediaInfo = img => {
+            const player = img.closest('.GifPlayer');
+            const video = player?.querySelector('video');
+            const videoUrl = video?.currentSrc || video?.src || video?.querySelector('source')?.src;
+            if (videoUrl) return { type: 'video', url: videoUrl };
+            if (player) return null; // 未播放的知乎 GIF 只有 JPG 封面，不误开。
+            const url = realUrl(img);
+            return url ? { type: 'image', url } : null;
+        };
+        const shouldHandle = img => {
+            if (!img || !img.closest(contentSelector) || img.closest('a[href]')) return false;
+            if (img.closest('.GifPlayer') && menu_value('menu_imageViewerGifNative')) return false;
+            const cls = String(img.className || '').toLowerCase();
+            if (['avatar', 'icon', 'emoji', 'button', 'logo'].some(word => cls.includes(word))) return false;
+            for (let el = img.parentElement, depth = 0; el && depth < 5; el = el.parentElement, depth++) {
+                if (String(el.className || '').toLowerCase().includes('avatar')) return false;
+            }
+            const width = img.naturalWidth || img.width, height = img.naturalHeight || img.height;
+            return !((width > 0 && width < 50) || (height > 0 && height < 50)) && Boolean(mediaInfo(img));
+        };
+        const collect = img => {
+            const root = img.closest(contentSelector);
+            if (!root) return [];
+            const seen = new Set(), result = [];
+            root.querySelectorAll('img').forEach(candidate => {
+                if (!shouldHandle(candidate)) return;
+                const item = mediaInfo(candidate), key = item && `${item.type}\u0000${item.url}`;
+                if (key && !seen.has(key)) { seen.add(key); result.push(item); }
+            });
+            return result;
+        };
+        const update = () => { if (stage) stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; if (media) media.style.rotate = `${rotate}deg`; };
+        const reset = () => { scale = 1; x = 0; y = 0; rotate = 0; update(); };
+        const render = item => {
+            media?.remove();
+            media = document.createElement(item.type === 'video' ? 'video' : 'img');
+            media.src = item.url;
+            media.style.cssText = 'display:block;max-width:90vw;max-height:90vh;width:auto;height:auto;pointer-events:none;';
+            if (item.type === 'video') { media.controls = true; media.autoplay = true; media.loop = true; media.playsInline = true; media.style.pointerEvents = 'auto'; }
+            media.onload = reset; media.onloadedmetadata = reset;
+            stage.appendChild(media);
+        };
+        const close = () => {
+            if (!overlay) return;
+            const old = overlay; old.removeEventListener('wheel', onWheel); old.removeEventListener('mousedown', onDown); old.remove();
+            document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.removeEventListener('keydown', onKey);
+            overlay = stage = media = null; items = []; index = -1; counter = null; dragging = false;
+        };
+        const switchItem = delta => { if (!items.length) return; index = (index + delta + items.length) % items.length; render(items[index]); if (counter) counter.textContent = `${index + 1} / ${items.length}`; };
+        let counter;
+        const open = (item, list, start) => {
+            close(); items = list.length ? list : [item]; index = start < 0 ? 0 : start; counter = null;
+            overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;cursor:grab;';
+            stage = document.createElement('div'); stage.style.cssText = 'position:relative;display:inline-block;'; overlay.appendChild(stage);
+            const bar = document.createElement('div'); bar.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:7px 12px;border-radius:24px;background:rgba(0,0,0,.65);color:#fff;z-index:1;';
+            const button = (text, title, fn) => { const b = document.createElement('button'); b.textContent = text; b.title = title; b.style.cssText = 'border:0;border-radius:50%;width:30px;height:30px;cursor:pointer;'; b.onclick = fn; bar.appendChild(b); };
+            if (menu_value('menu_imageViewerPrevNext')) button('‹', '上一张（左方向键）', () => switchItem(-1));
+            if (menu_value('menu_imageViewerCounter')) { counter = document.createElement('span'); bar.appendChild(counter); }
+            if (menu_value('menu_imageViewerPrevNext')) button('›', '下一张（右方向键）', () => switchItem(1));
+            if (menu_value('menu_imageViewerRotate')) button('↻', '旋转（R）', () => { rotate = (rotate + 90) % 360; update(); });
+            overlay.appendChild(bar); document.body.appendChild(overlay); if (counter) counter.textContent = `${index + 1} / ${items.length}`; render(items[index]);
+            overlay.addEventListener('wheel', onWheel, { passive: false }); overlay.addEventListener('mousedown', onDown); overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+            document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.addEventListener('keydown', onKey);
+        };
+        const onWheel = event => { if (!menu_value('menu_imageViewerZoom')) return; event.preventDefault(); scale = Math.max(.3, Math.min(5, scale + (event.deltaY > 0 ? -.1 : .1))); update(); };
+        const onDown = event => { if (!menu_value('menu_imageViewerDrag') || (event.target !== overlay && event.target !== stage)) return; dragging = true; startX = event.clientX; startY = event.clientY; originX = x; originY = y; };
+        const onMove = event => { if (!dragging) return; x = originX + event.clientX - startX; y = originY + event.clientY - startY; update(); };
+        const onUp = () => { dragging = false; };
+        const onKey = event => { if (event.key === 'Escape') close(); else if (menu_value('menu_imageViewerKeyboard') && menu_value('menu_imageViewerPrevNext') && event.key === 'ArrowLeft') switchItem(-1); else if (menu_value('menu_imageViewerKeyboard') && menu_value('menu_imageViewerPrevNext') && event.key === 'ArrowRight') switchItem(1); else if (menu_value('menu_imageViewerKeyboard') && menu_value('menu_imageViewerRotate') && event.key.toLowerCase() === 'r') { rotate = (rotate + 90) % 360; update(); } };
+
+        document.addEventListener('click', event => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.defaultPrevented) return;
+            const clicked = event.target instanceof Element ? event.target.closest('img, video') : null;
+            const img = clicked?.tagName === 'VIDEO' ? clicked.closest('.GifPlayer')?.querySelector('img') : clicked;
+            if (!shouldHandle(img)) return;
+            const item = mediaInfo(img), list = collect(img), start = list.findIndex(entry => entry.type === item.type && entry.url === item.url);
+            event.preventDefault(); event.stopPropagation(); open(item, list, start);
+        }, true);
+    }
+
+    // 知乎的“复制为 Markdown”不包含问题/文章标题，这里在知乎复制时补上标题。
+    function initCopyMarkdownTitle() {
+        let pending;
+        const format = (title, content) => {
+            if (!content || content.trimStart().startsWith(`# ${title}`)) return content;
+            return `# ${title}\n\n${content}`;
+        };
+        let requestSerial = 0;
+        const pollClipboard = (request, attempt = 0) => {
+            const clipboard = navigator.clipboard;
+            if (request.id !== requestSerial || !clipboard?.readText || attempt >= 10) return;
+            Promise.resolve(request.baseline).then(function (baseline) {
+                return clipboard.readText().then(content => ({ baseline, content }));
+            }).then(function ({ baseline, content }) {
+                if (request.id !== requestSerial) return;
+                const markdown = format(request.title, content);
+                if (markdown === content) return;
+                if (!content || content === baseline) {
+                    setTimeout(() => pollClipboard(request, attempt + 1), 100);
+                } else if (typeof GM_setClipboard === 'function') {
+                    try {
+                        GM_setClipboard(markdown, 'text/plain');
+                    } catch (error) {
+                        console.warn('写入 Markdown 剪贴板失败', error);
+                    }
+                } else if (clipboard.writeText) {
+                    clipboard.writeText(markdown).catch(function (error) {
+                        console.warn('写入 Markdown 剪贴板失败', error);
+                    });
+                }
+            }).catch(function () {
+                setTimeout(() => pollClipboard(request, attempt + 1), 100);
+            });
+        };
+        document.addEventListener('copy', function (event) {
+            if (!pending || pending.expires < Date.now()) return;
+            const clipboardData = event.clipboardData;
+            if (!clipboardData) return;
+            const content = clipboardData.getData('text/plain');
+            const markdown = format(pending.title, content);
+            if (markdown !== content) {
+                event.preventDefault();
+                clipboardData.setData('text/plain', markdown);
+            }
+            pending = null;
+        }, true);
+        document.addEventListener('click', function (event) {
+            const target = event.target instanceof Element ? event.target : null;
+            const menuItem = target && target.closest('button, [role="menuitem"], li, a');
+            const menuText = menuItem ? menuItem.textContent.replace(/\s+/g, '') : '';
+            if (!menuItem || menuText.indexOf('复制为Markdown') === -1) return;
+            const title = getPageTitle();
+            if (!title) return;
+            const clipboard = navigator.clipboard;
+            const baseline = clipboard?.readText ? clipboard.readText().catch(() => '') : '';
+            const id = ++requestSerial;
+            const request = { id, title, baseline };
+            pending = { id, title, expires: Date.now() + 2000 };
+            setTimeout(() => pollClipboard(request), 150);
+        }, true);
+    }
+
+    function getPageTitle() {
+        const titleElement = document.querySelector(
+            'h1.QuestionHeader-title, .QuestionHeader-title, h1.Post-Title, .Post-Title'
+        );
+        const title = titleElement?.textContent.trim() || document.title
+            .replace(/\s*[-|｜]\s*(知乎专栏|知乎)\s*$/, '')
+            .trim();
+        return title.replace(/^#+\s*/, '').trim();
     }
 
     function hideTitle() {
         // 获取需要控制的元素
         const floatingElement = document.getElementsByTagName('header')[0];
-        let beforeScrollTop = document.documentElement.scrollTop || document.body.scrollTop,
-            scrollTop = document.documentElement.scrollTop || window.pageYOffset || document.body.scrollTop,
-            scrollHeight = window.innerHeight || document.documentElement.clientHeight
+        if (!floatingElement) return;
+        let beforeScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 
         window.addEventListener('scroll', function (e) {
             var afterScrollTop = document.documentElement.scrollTop || document.body.scrollTop,
