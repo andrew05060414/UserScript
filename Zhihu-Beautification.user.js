@@ -75,9 +75,9 @@
                 }
                 menu_ID[i] = GM_registerMenuCommand(`${menu_num(menu_ALL[i][3])} ${menu_ALL[i][1]}`, function(){menu_toggle(`${menu_ALL[i][3]}`,`${menu_ALL[i][0]}`)});
             } else if (menu_ALL[i][0] === 'menu_widescreenDisplay'){
-                    GM_registerMenuCommand(`#️⃣ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7]])});
+                    menu_ID[i] = GM_registerMenuCommand(`#️⃣ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7]])});
             } else if (menu_ALL[i][0] === 'menu_imageEnhancement'){
-                    GM_registerMenuCommand(`🖼️ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7], menu_ALL[i+8], menu_ALL[i+9]])});
+                    menu_ID[i] = GM_registerMenuCommand(`🖼️ ${menu_ALL[i][1]}`, function(){menu_setting('checkbox', menu_ALL[i][1], menu_ALL[i][2], true, [menu_ALL[i+1], menu_ALL[i+2], menu_ALL[i+3], menu_ALL[i+4], menu_ALL[i+5], menu_ALL[i+6], menu_ALL[i+7], menu_ALL[i+8], menu_ALL[i+9]])});
             } else if (menu_ALL[i][0].indexOf('menu_widescreenDisplay') === -1 && menu_ALL[i][0].indexOf('menu_imageViewer') === -1 && menu_ALL[i][0] !== 'menu_picHeight') {
                 menu_ID[i] = GM_registerMenuCommand(`${menu_ALL[i][3]?'✅':'❌'} ${menu_ALL[i][1]}`, function(){menu_switch(`${menu_ALL[i][3]}`,`${menu_ALL[i][0]}`,`${menu_ALL[i][2]}`)});
             }
@@ -506,15 +506,17 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         // 隐藏文章开头大图
         if (menu_value('menu_postimg')) style += style_2;
 
-        if (document.lastChild) {
-            document.lastChild.appendChild(style_Add).textContent = style;
-        } else { // 避免网站加载速度太慢的备用措施
-            let timer1 = setInterval(function(){ // 每 10 毫秒检查一下 html 是否已存在
-                if (document.lastChild) {
-                    clearInterval(timer1); // 取消定时器
-                    document.lastChild.appendChild(style_Add).textContent = style;
-                }
-            }, 10);
+        const appendStyle = () => {
+            const root = document.documentElement;
+            if (!root) return false;
+            root.appendChild(style_Add).textContent = style;
+            return true;
+        };
+        if (!appendStyle()) { // document-start 时 html 可能尚未创建
+            const observer = new MutationObserver(function () {
+                if (appendStyle()) observer.disconnect();
+            });
+            observer.observe(document, {childList: true});
         }
     }
 
@@ -598,7 +600,8 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
 
         document.addEventListener('click', event => {
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.defaultPrevented) return;
-            const clicked = event.target instanceof Element ? event.target.closest('img, video') : null;
+            const target = event.target;
+            const clicked = target && target.nodeType === 1 && typeof target.closest === 'function' ? target.closest('img, video') : null;
             const img = clicked?.tagName === 'VIDEO' ? clicked.closest('.GifPlayer')?.querySelector('img') : clicked;
             if (!shouldHandle(img)) return;
             const item = mediaInfo(img), list = collect(img), start = list.findIndex(entry => entry.type === item.type && entry.url === item.url);
@@ -616,45 +619,55 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         let requestSerial = 0;
         const pollClipboard = (request, attempt = 0) => {
             const clipboard = navigator.clipboard;
-            if (request.id !== requestSerial || !clipboard?.readText || attempt >= 10) return;
+            if (request.id !== requestSerial || request.expires < Date.now() || typeof clipboard?.readText !== 'function' || attempt >= 10) return;
             Promise.resolve(request.baseline).then(function (baseline) {
                 return clipboard.readText().then(content => ({ baseline, content }));
             }).then(function ({ baseline, content }) {
-                if (request.id !== requestSerial) return;
+                if (request.id !== requestSerial || request.expires < Date.now()) return;
                 const markdown = format(request.title, content);
                 if (markdown === content) return;
                 if (!content || content === baseline) {
                     setTimeout(() => pollClipboard(request, attempt + 1), 100);
-                } else if (typeof GM_setClipboard === 'function') {
-                    try {
-                        GM_setClipboard(markdown, 'text/plain');
-                    } catch (error) {
-                        console.warn('写入 Markdown 剪贴板失败', error);
+                } else {
+                    let copied = false;
+                    if (typeof GM_setClipboard === 'function') {
+                        try {
+                            GM_setClipboard(markdown, 'text');
+                            copied = true;
+                        } catch (error) {
+                            console.warn('写入 Markdown 剪贴板失败', error);
+                        }
                     }
-                } else if (clipboard.writeText) {
-                    clipboard.writeText(markdown).catch(function (error) {
-                        console.warn('写入 Markdown 剪贴板失败', error);
-                    });
+                    if (!copied && typeof clipboard.writeText === 'function') {
+                        clipboard.writeText(markdown).catch(function (error) {
+                            console.warn('写入 Markdown 剪贴板失败', error);
+                        });
+                    }
                 }
             }).catch(function () {
                 setTimeout(() => pollClipboard(request, attempt + 1), 100);
             });
         };
         document.addEventListener('copy', function (event) {
-            if (!pending || pending.expires < Date.now()) return;
+            const request = pending;
+            if (!request || request.id !== requestSerial || request.expires < Date.now()) return;
+            pending = null;
             const clipboardData = event.clipboardData;
             if (!clipboardData) return;
             const content = clipboardData.getData('text/plain');
-            const markdown = format(pending.title, content);
+            const markdown = format(request.title, content);
             if (markdown !== content) {
-                event.preventDefault();
-                clipboardData.setData('text/plain', markdown);
+                try {
+                    event.preventDefault();
+                    clipboardData.setData('text/plain', markdown);
+                } catch (error) {
+                    console.warn('写入 Markdown 剪贴板失败', error);
+                }
             }
-            pending = null;
         }, true);
         document.addEventListener('click', function (event) {
-            const target = event.target instanceof Element ? event.target : null;
-            const menuItem = target && target.closest('button, [role="menuitem"], li, a');
+            const target = event.target;
+            const menuItem = target && target.nodeType === 1 && typeof target.closest === 'function' ? target.closest('button, [role="menuitem"], li, a') : null;
             const menuText = menuItem ? menuItem.textContent.replace(/\s+/g, '') : '';
             if (!menuItem || menuText.indexOf('复制为Markdown') === -1) return;
             const title = getPageTitle();
@@ -662,17 +675,17 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             const clipboard = navigator.clipboard;
             const baseline = clipboard?.readText ? clipboard.readText().catch(() => '') : '';
             const id = ++requestSerial;
-            const request = { id, title, baseline };
-            pending = { id, title, expires: Date.now() + 2000 };
+            const request = { id, title, baseline, expires: Date.now() + 2000 };
+            pending = request;
             setTimeout(() => pollClipboard(request), 150);
         }, true);
     }
 
     function getPageTitle() {
         const titleElement = document.querySelector(
-            'h1.QuestionHeader-title, .QuestionHeader-title, h1.Post-Title, .Post-Title'
+            'h1.QuestionHeader-title, .QuestionHeader-title, [data-za-detail-view-path-module="QuestionHeader"] h1, h1.Post-Title, .Post-Title'
         );
-        const title = titleElement?.textContent.trim() || document.title
+        const title = titleElement?.textContent.trim() || document.querySelector('meta[property="og:title"]')?.content?.trim() || document.title
             .replace(/\s*[-|｜]\s*(知乎专栏|知乎)\s*$/, '')
             .trim();
         return title.replace(/^#+\s*/, '').trim();
@@ -712,15 +725,16 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
 
     // 修改知乎 Cookie 中的主题类型
     function setTheme(theme) {
+        const root = document.documentElement;
         switch(theme) {
             case 'light':
                 document.cookie='theme=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-                document.lastChild.setAttribute('data-theme', 'light');
+                if (root) root.setAttribute('data-theme', 'light');
                 location.reload(); // 刷新网页
                 break;
             case 'dark':
                 document.cookie='theme=dark; expires=Thu, 18 Dec 2031 12:00:00 GMT; path=/';
-                document.lastChild.setAttribute('data-theme', 'dark');
+                if (root) root.setAttribute('data-theme', 'dark');
                 if (GM_getValue('menu_darkMode')) location.reload(); // 刷新网页
                 break;
         }
