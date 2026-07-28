@@ -127,6 +127,18 @@ function menu_value(menuName) {
 }
 
 
+// 动态按钮中的页面数据必须先转义，避免破坏属性值
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[character]));
+}
+
+
 // 脚本设置
 function menu_setting(type, title, tips, line, menu) {
     let _br = '', _html = `<style class="zhihuE_SettingStyle">.zhihuE_SettingRoot {position: absolute;top: 50%;left: 50%;-webkit-transform: translate(-50%, -50%);-moz-transform: translate(-50%, -50%);-ms-transform: translate(-50%, -50%);-o-transform: translate(-50%, -50%);transform: translate(-50%, -50%);width: auto;min-width: 400px;max-width: 600px;height: auto;min-height: 150px;max-height: 400px;color: #535353;background-color: #fff;border-radius: 3px;}
@@ -183,30 +195,30 @@ function getCollapsedAnswerObserver() {
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 if (mutation.target.nodeType !== Node.ELEMENT_NODE) continue;
-                if (mutation.target.hasAttribute('script-collapsed')) return
+                if (mutation.target.hasAttribute('script-collapsed')) continue
                 // 短的回答
                 if (mutation.target.classList.contains('RichContent')) {
                     for (const addedNode of mutation.addedNodes) {
                         if (addedNode.nodeType != Node.ELEMENT_NODE) continue
-                        if (addedNode.className != 'RichContent-inner') continue
-                        if (addedNode.offsetHeight < 400) break
+                        if (!addedNode.classList.contains('RichContent-inner')) continue
+                        if (addedNode.offsetHeight < 400) continue
                         //console.log('111',addedNode, addedNode.classList, addedNode.classList.contains('RichContent-inner'), addedNode.offsetHeight, addedNode.textContent.length)
                         const button = mutation.target.querySelector('.ContentItem-actions.Sticky [data-zop-retract-question]');
                         if (button) {
                             mutation.target.setAttribute('script-collapsed', '');
                             button.click();
-                            return
+                            break
                         }
                     }
                 // 长的回答
                 } else if (mutation.target.tagName === 'DIV' && !mutation.target.style.cssText && !mutation.target.className) {
-                    if (mutation.target.parentElement?.hasAttribute('script-collapsed')) return
+                    const parent = mutation.target.parentElement;
+                    if (!parent || parent.hasAttribute('script-collapsed')) continue
                     //console.log('222',mutation.target, mutation.target.querySelector('.ContentItem-actions.Sticky [data-zop-retract-question]'))
                     const button = mutation.target.querySelector('.ContentItem-actions.Sticky [data-zop-retract-question]');
                     if (button) {
-                        mutation.target.parentElement.setAttribute('script-collapsed', '');
+                        parent.setAttribute('script-collapsed', '');
                         button.click();
-                        return
                     }
                 }
             }
@@ -221,6 +233,7 @@ function getCollapsedAnswerObserver() {
         observer.end = function() {
             if (this._active) {
                 this.disconnect();
+                this._active = false;
             }
         }
 
@@ -273,7 +286,7 @@ function collapsedAnswer() {
                 // 被 getCollapsedAnswerObserver 函数收起过的，悬浮 [收起] 按钮（悬浮底部的横栏）
                 document.querySelectorAll('.RichContent:not([script-collapsed]) .ContentItem-actions.Sticky [data-zop-retract-question]').forEach(function(button) {
                     let el = button.parentElement;
-                    while (!el.classList.contains('RichContent')) {el = el.parentElement;}
+                    while (el && !el.classList.contains('RichContent')) {el = el.parentElement;}
                     if (el) el.setAttribute('script-collapsed', '');
                     button.click();
                 })
@@ -323,7 +336,7 @@ function collapsedNowAnswer(selectors) {
                 for (let el of document.querySelectorAll('.ContentItem-rightButton[data-zop-retract-question]')) { // 遍历所有回答底部的 [收起] 按钮
                     if (isElementInViewport(el)) { // 判断该 [收起] 按钮是否在可视区域内
                         // 固定的 [收起评论]（先看看是否展开评论，即存在 [收起评论] 按钮）
-                        let commentCollapseButton = el.parentNode.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                        let commentCollapseButton = el.parentNode?.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
                         // 如果展开了评论，就收起评论
                         //console.log('333')
                         //if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) commentCollapseButton.click();
@@ -385,8 +398,8 @@ function collapsedNowAnswer(selectors) {
                         for (let el of commentCollapseButton_1) {
                             if (isElementInViewport(el)) {
                                 let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
-                                    commentCollapseButton = parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                                if (commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                                    commentCollapseButton = parentElement?.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                                if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
                                     //console.log('999')
                                     commentCollapseButton.click()
                                     if (!isElementInViewport(commentCollapseButton)) {console.log(parentElement,parentElement.offsetTop,parentElement.offsetHeight);scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)}
@@ -402,9 +415,9 @@ function collapsedNowAnswer(selectors) {
                             for (let el of commentCollapseButton_2) {
                                 if (isElementInViewport(el)) {
                                     let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
-                                    commentCollapseButton = parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                                    commentCollapseButton = parentElement?.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
                                     //console.log(commentCollapseButton)
-                                    if (commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                                    if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
                                         //console.log('101010')
                                         commentCollapseButton.click()
                                         if (!isElementInViewport(commentCollapseButton)) {console.log(parentElement,parentElement.offsetTop,parentElement.offsetHeight);scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)}
@@ -475,7 +488,6 @@ function blockLowCount(type) {
         // 前几条因为是直接加载的，而不是动态插入网页的，所以需要单独判断
         function blockLowCount_now() {
             document.querySelectorAll(className1).forEach(function(item1){
-                console.log(item1)
                 blockLowCount_1(item1,menuUpvote,'upvote_num');
                 blockLowCount_1(item1,menuComment,'comment_num');
             })
@@ -491,10 +503,14 @@ function blockLowCount(type) {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
-                    if (target.className === className2) {
+                    if (target.matches(className1)) {
                         blockLowCount_1(target,menuUpvote,'upvote_num');
                         blockLowCount_1(target,menuComment,'comment_num');
                     }
+                    target.querySelectorAll(className1).forEach(function(item){
+                        blockLowCount_1(item,menuUpvote,'upvote_num');
+                        blockLowCount_1(item,menuComment,'comment_num');
+                    });
                 }
             }
         };
@@ -504,9 +520,12 @@ function blockLowCount(type) {
 
 
     function blockLowCount_1(item, menu, type) {
-        if (GM_getValue(menu)) {
-            let item_ContentItem = item.querySelector('.ContentItem')
-            if (item_ContentItem && item_ContentItem.dataset.zaExtraModule) {
+        const configuredThreshold = GM_getValue(menu);
+        if (configuredThreshold === '' || configuredThreshold === null || configuredThreshold === undefined) return;
+        const threshold = Number(configuredThreshold);
+        if (!Number.isFinite(threshold) || !item?.querySelector) return;
+        let item_ContentItem = item.querySelector('.ContentItem')
+        if (item_ContentItem && item_ContentItem.dataset.zaExtraModule) {
                 let item2;
                 try {
                     item2 = JSON.parse(item_ContentItem.dataset.zaExtraModule);
@@ -515,12 +534,13 @@ function blockLowCount(type) {
                     return;
                 }
                 //console.log(item2)
-                if (item2 && item2.card.content && Number(item2.card.content[type]) < Number(GM_getValue(menu))) {
-                    console.log('已屏蔽' + (type === 'upvote_num' ? '低赞':'低评') + (item_ContentItem.classList.contains('AnswerItem') ? '回答':'文章') + '：', item2.card.content[type] + '<' + GM_getValue(menu), item);
+                const content = item2?.card?.content;
+                const count = Number(content?.[type]);
+                if (content && Number.isFinite(count) && count < threshold) {
+                    console.log('已屏蔽' + (type === 'upvote_num' ? '低赞':'低评') + (item_ContentItem.classList.contains('AnswerItem') ? '回答':'文章') + '：', content[type] + '<' + threshold, item);
                     item.hidden = true;
                     item.style.display = 'none';
                 }
-            }
         }
     }
 }
@@ -571,20 +591,21 @@ function blockUsers(type) {
     blockUsers_button(); //        加入黑名单按钮（用户信息悬浮框中）
 
     function blockUsers_(className1, className2) {
+        function blockItem(item1) {
+            let item = item1.querySelector('.ContentItem.AnswerItem, .ContentItem.ArticleItem'); // 用户名所在元素
+            if (!item) return;
+            for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
+                if (keyword != '' && (item.dataset.zop || '').indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
+                    console.log('已屏蔽：' + (item.dataset.zop || ''));
+                    item1.hidden = true;
+                    break;
+                }
+            }
+        }
+
         // 前几条因为是直接加载的，而不是动态插入网页的，所以需要单独判断
         function blockKeywords_now() {
-            document.querySelectorAll(className1).forEach(function(item1){
-                let item = item1.querySelector('.ContentItem.AnswerItem, .ContentItem.ArticleItem'); // 用户名所在元素
-                if (item) {
-                    for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                        if (keyword != '' && (item.dataset.zop || '').indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
-                            console.log('已屏蔽：' + (item.dataset.zop || ''));
-                            item1.hidden = true;
-                            break;
-                        }
-                    }
-                }
-            })
+            document.querySelectorAll(className1).forEach(blockItem)
         }
 
         blockKeywords_now();
@@ -597,18 +618,8 @@ function blockUsers(type) {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
-                    if (target.className === className2) {
-                        let item = target.querySelector('.ContentItem.AnswerItem, .ContentItem.ArticleItem'); // 用户名所在元素
-                        if (item) {
-                            for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                                if (keyword != '' && (item.dataset.zop || '').indexOf('authorName":"' + keyword + '",') > -1) { // 找到就删除该信息流
-                                    console.log('已屏蔽：' + (item.dataset.zop || ''));
-                                    target.hidden = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    if (target.matches(className1)) blockItem(target);
+                    target.querySelectorAll(className1).forEach(blockItem);
                 }
             }
         };
@@ -618,81 +629,63 @@ function blockUsers(type) {
 
 
     function blockUsers_question() {
-        const blockUsers_question_ = (mutationsList, observer) => {
+        const blockItem = (item) => {
+            const item1 = item.querySelector('.ContentItem.AnswerItem');
+            if (!item1) return;
+            menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
+                if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
+                    console.log('已屏蔽：' + (item1.dataset.zop || ''))
+                    item.hidden = true;
+                }
+            })
+        };
+
+        const processAddedNode = (target) => {
+            if (target.matches('.List-item, .Card.AnswerCard')) blockItem(target);
+            target.querySelectorAll('.List-item, .Card.AnswerCard').forEach(blockItem);
+        };
+
+        const blockUsers_question_ = (mutationsList) => {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
-                    if (target.className === 'List-item' || target.className === 'Card AnswerCard') {
-                        let item1 = target.querySelector('.ContentItem.AnswerItem');
-                        if (item1) {
-                            menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                                if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                                    console.log('已屏蔽：' + (item1.dataset.zop || ''))
-                                    target.hidden = true;
-                                }
-                            })
-                        }
-                    }
+                    processAddedNode(target);
                 }
             }
         };
 
-        const blockUsers_question_answer_ = (mutationsList, observer) => {
-            for (const mutation of mutationsList) {
-                for (const target of mutation.addedNodes) {
-                    if (target.nodeType != 1) continue
-                    target.querySelectorAll('.List-item, .Card.AnswerCard').forEach(function(item){
-                        let item1 = item.querySelector('.ContentItem.AnswerItem');
-                        if (item1) {
-                            menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                                if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                                    console.log('已屏蔽：' + (item1.dataset.zop || ''))
-                                    item.hidden = true;
-                                }
-                            })
-                        }
-                    })
-                }
-            }
-        };
-
-        if (location.pathname.indexOf('/answer/') > -1) { // 回答页（就是只有三个回答的页面）
-            const observer = new MutationObserver(blockUsers_question_answer_);
-            observer.observe(document, { childList: true, subtree: true });
-        } else { // 问题页（可以显示所有回答的页面）
-            const observer = new MutationObserver(blockUsers_question_);
-            observer.observe(document, { childList: true, subtree: true });
-        }
+        const observer = new MutationObserver(blockUsers_question_);
+        observer.observe(document, { childList: true, subtree: true });
 
         // 针对的是打开网页后直接加载的前面几个回答（上面哪些是针对动态加载的回答）
         document.querySelectorAll('.List-item, .Card.AnswerCard').forEach(function(item){
-            let item1 = item.querySelector('.ContentItem.AnswerItem');
-            if (item1) {
-                menu_value('menu_customBlockUsers').forEach(function(item2){ // 遍历用户黑名单
-                    if ((item1.dataset.zop || '').indexOf('authorName":"' + item2 + '",') > -1) { // 找到就删除该回答
-                        console.log('已屏蔽：' + (item1.dataset.zop || ''))
-                        item.hidden = true;
-                    }
-                })
-            }
+            blockItem(item);
         })
     }
 
     function blockUsers_search() {
+        const cardSelector = '.Card.SearchResult-Card[data-za-detail-view-path-module="AnswerItem"], .Card.SearchResult-Card[data-za-detail-view-path-module="PostItem"]';
+
+        function blockCard(item1) {
+            let item = item1.querySelector('.RichText.ztext.CopyrightRichText-richText b'); // 用户名所在元素
+            if (!item) return;
+            for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
+                if (keyword != '' && item.textContent === keyword) { // 找到就删除该信息流
+                    console.log('已屏蔽：' + item.textContent);
+                    item1.hidden = true;
+                    break;
+                }
+            }
+        }
+
+        function processAddedNode(target) {
+            if (target.matches(cardSelector)) blockCard(target);
+            target.querySelectorAll(cardSelector).forEach(blockCard);
+        }
+
         function blockUsers_now() {
             if (location.search.indexOf('type=content') === -1) return // 目前只支持搜索页的 [综合]
-            document.querySelectorAll('.Card.SearchResult-Card[data-za-detail-view-path-module="AnswerItem"], .Card.SearchResult-Card[data-za-detail-view-path-module="PostItem"]').forEach(function(item1){
-                let item = item1.querySelector('.RichText.ztext.CopyrightRichText-richText b'); // 用户名所在元素
-                if (item) {
-                    for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                        if (keyword != '' && item.textContent === keyword) { // 找到就删除该信息流
-                            console.log('已屏蔽：' + item.textContent);
-                            item1.hidden = true;
-                            break;
-                        }
-                    }
-                }
-            })
+            document.querySelectorAll(cardSelector).forEach(blockCard)
         }
 
         setTimeout(blockUsers_now, 2000);
@@ -705,16 +698,7 @@ function blockUsers(type) {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
-                    let item = target.querySelector('.Card.SearchResult-Card[data-za-detail-view-path-module="AnswerItem"] .RichText.ztext.CopyrightRichText-richText b, .Card.SearchResult-Card[data-za-detail-view-path-module="PostItem"] .RichText.ztext.CopyrightRichText-richText b');
-                    if (item) {
-                        for (const keyword of menu_value('menu_customBlockUsers')) { // 遍历用户名黑名单
-                            if (keyword != '' && item.textContent === keyword) { // 找到就删除该信息流
-                                console.log('已屏蔽：' + item.textContent);
-                                target.hidden = true;
-                                break;
-                            }
-                        }
-                    }
+                    processAddedNode(target);
                 }
             }
         };
@@ -735,7 +719,8 @@ function blockUsers(type) {
                             menu_value('menu_customBlockUsers').forEach(function(item1){ // 遍历用户黑名单
                                 if (item.alt === item1) { // 找到就删除该搜索结果
                                     //console.log(item.alt,item1)
-                                    item.parentElement.parentElement.parentElement.parentElement.style.display = "none";
+                                    const comment = item.closest?.('.CommentItemV2') || item.parentElement?.parentElement?.parentElement?.parentElement;
+                                    if (comment) comment.style.display = "none";
                                 }
                             })
 
@@ -766,7 +751,7 @@ function blockUsers(type) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
                     //console.log(target, target.className)
-                    if (target.tagName == 'DIV' && target.className && (target.className.indexOf('css-') == 0 || target.style == 'opacity: 1;')) {
+                    if (target.tagName == 'DIV' && target.className && (target.className.indexOf('css-') == 0 || target.style?.opacity === '1')) {
                         const item = target.querySelector('.MemberButtonGroup.ProfileButtonGroup.HoverCard-buttons'),
                               item1 = target.querySelector('img.Avatar+div span.UserLink>a.UserLink-link[data-za-detail-view-element_name=User]');
                         if (item1) {
@@ -774,13 +759,13 @@ function blockUsers(type) {
                             for (let num = 0;num<users.length;num++) { // 判断是否已存在
                                 if (item && users[num] === name) { // 已存在
                                     target.querySelectorAll('.Button.Button--primary.Button--red').forEach(function(item){item.style.display = 'none';}) // 隐藏知乎自带的已屏蔽按钮
-                                    item.insertAdjacentHTML('afterbegin', `<button type="button" data-name="${name}" data-userid="${userid}" class="Button FollowButton Button--primary Button--red"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 已屏蔽</button>`);
+                                    item.insertAdjacentHTML('afterbegin', `<button type="button" data-name="${escapeHtml(name)}" data-userid="${escapeHtml(userid)}" class="Button FollowButton Button--primary Button--red"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 已屏蔽</button>`);
                                     item.firstElementChild.onclick = function(){this.disabled = true;blockUsers_button_del(this.dataset.name, this.dataset.userid, false)}
                                     return
                                 }
                             };
                             if (item && !target.querySelector('button[data-name][data-userid]')) {
-                                item.insertAdjacentHTML('beforeend', `<button type="button" data-name="${name}" data-userid="${userid}" class="Button FollowButton Button--primary Button--red" style="width: 100%;margin: 7px 0 0 0;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 屏蔽用户</button>`);
+                                item.insertAdjacentHTML('beforeend', `<button type="button" data-name="${escapeHtml(name)}" data-userid="${escapeHtml(userid)}" class="Button FollowButton Button--primary Button--red" style="width: 100%;margin: 7px 0 0 0;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 屏蔽用户</button>`);
                                 item.lastElementChild.onclick = function(){this.disabled = true;blockUsers_button_add(this.dataset.name, this.dataset.userid, false)}
                             }
                         }
@@ -803,13 +788,13 @@ function blockUsers(type) {
         for (let num = 0;num<users.length;num++) { // 判断是否已存在
             if (users[num] === name) { // 已存在
                 document.querySelectorAll('.Button.Button--primary.Button--red').forEach(function(item){item.style.display = 'none';}) // 隐藏知乎自带的已屏蔽按钮
-                item.insertAdjacentHTML('afterbegin', `<button type="button" data-name="${name}" data-userid="${userid}" class="Button FollowButton Button--primary Button--red" style="margin: 0 0 0 12px;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 已屏蔽</button>`);
+                item.insertAdjacentHTML('afterbegin', `<button type="button" data-name="${escapeHtml(name)}" data-userid="${escapeHtml(userid)}" class="Button FollowButton Button--primary Button--red" style="margin: 0 0 0 12px;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 已屏蔽</button>`);
                 item.firstElementChild.onclick = function(){this.disabled = true;blockUsers_button_del(this.dataset.name, this.dataset.userid, true)}
                 return
             }
         };
         if (item) {
-            item.insertAdjacentHTML('beforeend', `<button type="button" data-name="${name}" data-userid="${userid}" class="Button FollowButton Button--primary Button--red" style="margin: 0 0 0 12px;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 屏蔽用户</button>`);
+            item.insertAdjacentHTML('beforeend', `<button type="button" data-name="${escapeHtml(name)}" data-userid="${escapeHtml(userid)}" class="Button FollowButton Button--primary Button--red" style="margin: 0 0 0 12px;"><span style="display: inline-flex; align-items: center;">​<svg width="1.2em" height="1.2em" viewBox="0 0 24 24" class="Zi Zi--Ban" fill="currentColor"><path fill-rule="evenodd" d="M16.346 18.113a7.5 7.5 0 0 1-10.46-10.46l10.46 10.46Zm1.767-1.767L7.654 5.886a7.5 7.5 0 0 1 10.46 10.46ZM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10Z" clip-rule="evenodd"></path></svg></span> 屏蔽用户</button>`);
             item.lastElementChild.onclick = function(){this.disabled = true;blockUsers_button_add(this.dataset.name, this.dataset.userid, true)}
         }
     }
@@ -823,7 +808,7 @@ function blockUsers(type) {
             users.push(name); // 追加用户名
             GM_setValue('menu_customBlockUsers', users); // 写入屏蔽列表
             // 加入知乎自带的黑名单（和本脚本互补~
-            GM_xmlhttpRequest({url: `https://www.zhihu.com/api/v4/members/${userid}/actions/block`,method: 'POST',timeout: 2000});
+            GM_xmlhttpRequest({url: `https://www.zhihu.com/api/v4/members/${encodeURIComponent(userid)}/actions/block`,method: 'POST',timeout: 2000});
             // 是否刷新本页
             if (reload) {
                 setTimeout(function(){location.reload()}, 200); // 刷新网页，延迟 200 毫秒，避免知乎反应慢~
@@ -845,7 +830,7 @@ function blockUsers(type) {
             users.splice(index, 1); // 移除用户名
             GM_setValue('menu_customBlockUsers', users); // 写入屏蔽列表
             // 移除知乎自带的黑名单
-            GM_xmlhttpRequest({url: `https://www.zhihu.com/api/v4/members/${userid}/actions/block`,method: 'DELETE',timeout: 2000});
+            GM_xmlhttpRequest({url: `https://www.zhihu.com/api/v4/members/${encodeURIComponent(userid)}/actions/block`,method: 'DELETE',timeout: 2000});
             // 是否刷新本页
             if (reload) {
                 setTimeout(function(){location.reload()}, 200); // 刷新网页，延迟 200 毫秒，避免知乎反应慢~
@@ -961,12 +946,19 @@ function blockKeywords(type) {
 
 
     function blockKeywords_(className1, className2) {
+        function blockItem(item1) {
+            const titleSelector = location.pathname === '/hot'
+                ? 'h2.HotItem-title'
+                : 'h2.ContentItem-title meta[itemprop="name"], meta[itemprop="headline"]';
+            blockKeywords_1(item1, titleSelector);
+        }
+
         // 前几条因为是直接加载的，而不是动态插入网页的，所以需要单独判断
         function blockKeywords_now() {
             if (location.pathname === '/hot') {
-                document.querySelectorAll('.HotItem').forEach(function(item1){blockKeywords_1(item1, 'h2.HotItem-title');})
+                document.querySelectorAll('.HotItem').forEach(blockItem)
             } else {
-                document.querySelectorAll(className1).forEach(function(item1){blockKeywords_1(item1, 'h2.ContentItem-title meta[itemprop="name"], meta[itemprop="headline"]');})
+                document.querySelectorAll(className1).forEach(blockItem)
             }
         }
 
@@ -980,7 +972,9 @@ function blockKeywords(type) {
             for (const mutation of mutationsList) {
                 for (const target of mutation.addedNodes) {
                     if (target.nodeType != 1) continue
-                    if (target.className === className2) {blockKeywords_1(target, 'h2.ContentItem-title meta[itemprop="name"], meta[itemprop="headline"]');}
+                    const selector = location.pathname === '/hot' ? '.HotItem' : className1;
+                    if (target.matches(selector)) blockItem(target);
+                    target.querySelectorAll(selector).forEach(blockItem);
                 }
             }
         };
