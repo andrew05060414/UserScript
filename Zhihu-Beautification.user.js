@@ -12,7 +12,6 @@
 // @grant        GM_openInTab
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_setClipboard
 // @grant        GM_notification
 // @sandbox      JavaScript
 // @license      GPL-3.0 License
@@ -57,7 +56,6 @@
     // 向下翻时自动隐藏顶栏
     if (menu_value('menu_hideTitle')) setTimeout(hideTitle, 2000);
     if (menu_value('menu_imageViewer')) initImageViewer();
-    initCopyMarkdownTitle();
 
     // 注册脚本菜单
     function registerMenuCommand() {
@@ -607,88 +605,6 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             const item = mediaInfo(img), list = collect(img), start = list.findIndex(entry => entry.type === item.type && entry.url === item.url);
             event.preventDefault(); event.stopPropagation(); open(item, list, start);
         }, true);
-    }
-
-    // 知乎的“复制为 Markdown”不包含问题/文章标题，这里在知乎复制时补上标题。
-    function initCopyMarkdownTitle() {
-        let pending;
-        const format = (title, content) => {
-            if (!content || content.trimStart().startsWith(`# ${title}`)) return content;
-            return `# ${title}\n\n${content}`;
-        };
-        let requestSerial = 0;
-        const pollClipboard = (request, attempt = 0) => {
-            const clipboard = navigator.clipboard;
-            if (request.id !== requestSerial || request.expires < Date.now() || typeof clipboard?.readText !== 'function' || attempt >= 10) return;
-            Promise.resolve(request.baseline).then(function (baseline) {
-                return clipboard.readText().then(content => ({ baseline, content }));
-            }).then(function ({ baseline, content }) {
-                if (request.id !== requestSerial || request.expires < Date.now()) return;
-                const markdown = format(request.title, content);
-                if (markdown === content) return;
-                if (!content || content === baseline) {
-                    setTimeout(() => pollClipboard(request, attempt + 1), 100);
-                } else {
-                    let copied = false;
-                    if (typeof GM_setClipboard === 'function') {
-                        try {
-                            GM_setClipboard(markdown, 'text');
-                            copied = true;
-                        } catch (error) {
-                            console.warn('写入 Markdown 剪贴板失败', error);
-                        }
-                    }
-                    if (!copied && typeof clipboard.writeText === 'function') {
-                        clipboard.writeText(markdown).catch(function (error) {
-                            console.warn('写入 Markdown 剪贴板失败', error);
-                        });
-                    }
-                }
-            }).catch(function () {
-                setTimeout(() => pollClipboard(request, attempt + 1), 100);
-            });
-        };
-        document.addEventListener('copy', function (event) {
-            const request = pending;
-            if (!request || request.id !== requestSerial || request.expires < Date.now()) return;
-            pending = null;
-            const clipboardData = event.clipboardData;
-            if (!clipboardData) return;
-            const content = clipboardData.getData('text/plain');
-            const markdown = format(request.title, content);
-            if (markdown !== content) {
-                try {
-                    event.preventDefault();
-                    clipboardData.setData('text/plain', markdown);
-                } catch (error) {
-                    console.warn('写入 Markdown 剪贴板失败', error);
-                }
-            }
-        }, true);
-        document.addEventListener('click', function (event) {
-            const target = event.target;
-            const menuItem = target && target.nodeType === 1 && typeof target.closest === 'function' ? target.closest('button, [role="menuitem"], li, a') : null;
-            const menuText = menuItem ? menuItem.textContent.replace(/\s+/g, '') : '';
-            if (!menuItem || menuText.indexOf('复制为Markdown') === -1) return;
-            const title = getPageTitle();
-            if (!title) return;
-            const clipboard = navigator.clipboard;
-            const baseline = clipboard?.readText ? clipboard.readText().catch(() => '') : '';
-            const id = ++requestSerial;
-            const request = { id, title, baseline, expires: Date.now() + 2000 };
-            pending = request;
-            setTimeout(() => pollClipboard(request), 150);
-        }, true);
-    }
-
-    function getPageTitle() {
-        const titleElement = document.querySelector(
-            'h1.QuestionHeader-title, .QuestionHeader-title, [data-za-detail-view-path-module="QuestionHeader"] h1, h1.Post-Title, .Post-Title'
-        );
-        const title = titleElement?.textContent.trim() || document.querySelector('meta[property="og:title"]')?.content?.trim() || document.title
-            .replace(/\s*[-|｜]\s*(知乎专栏|知乎)\s*$/, '')
-            .trim();
-        return title.replace(/^#+\s*/, '').trim();
     }
 
     function hideTitle() {
