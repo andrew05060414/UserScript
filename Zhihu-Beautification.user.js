@@ -1,6 +1,8 @@
 // ==UserScript==
 // @name         知乎美化
 // @version      1.5.27
+// @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
+// @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @author       X.I.U
 // @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
@@ -12,7 +14,6 @@
 // @grant        GM_openInTab
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_setClipboard
 // @grant        GM_notification
 // @sandbox      JavaScript
 // @license      GPL-3.0 License
@@ -612,45 +613,112 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
     // 知乎的“复制为 Markdown”不包含问题/文章标题，这里在知乎复制时补上标题。
     function initCopyMarkdownTitle() {
         let pending;
+        const eventName = 'zhihu-beautification-copy-markdown';
         const format = (title, content) => {
-            if (!content || content.trimStart().startsWith(`# ${title}`)) return content;
+            if (typeof content !== 'string' || !content || content.trimStart().startsWith(`# ${title}`)) return content;
             return `# ${title}\n\n${content}`;
         };
-        let requestSerial = 0;
-        const pollClipboard = (request, attempt = 0) => {
-            const clipboard = navigator.clipboard;
-            if (request.id !== requestSerial || request.expires < Date.now() || typeof clipboard?.readText !== 'function' || attempt >= 10) return;
-            Promise.resolve(request.baseline).then(function (baseline) {
-                return clipboard.readText().then(content => ({ baseline, content }));
-            }).then(function ({ baseline, content }) {
-                if (request.id !== requestSerial || request.expires < Date.now()) return;
-                const markdown = format(request.title, content);
-                if (markdown === content) return;
-                if (!content || content === baseline) {
-                    setTimeout(() => pollClipboard(request, attempt + 1), 100);
-                } else {
-                    let copied = false;
-                    if (typeof GM_setClipboard === 'function') {
+
+        // 异步复制不会触发 copy 事件，因此在页面上下文拦截知乎的写入 API。
+        // 这只修改即将写入的文本，不读取系统剪贴板，也不会触发剪贴板读取权限。
+        const installPageClipboardInterceptor = function () {
+            const marker = '__zhihuBeautificationClipboardInterceptor__';
+            const eventName = 'zhihu-beautification-copy-markdown';
+            if (window[marker]) return;
+            window[marker] = true;
+
+            const state = {title: '', expires: 0};
+            const format = (title, content) => {
+                if (typeof content !== 'string' || !content || content.trimStart().startsWith(`# ${title}`)) return content;
+                return `# ${title}\n\n${content}`;
+            };
+
+            const patchClipboard = () => {
+                const clipboard = navigator.clipboard;
+                if (!clipboard) return;
+                const prototype = Object.getPrototypeOf(clipboard);
+                ['writeText', 'write'].forEach(name => {
+                    const original = clipboard[name];
+                    if (typeof original !== 'function' || original[marker]) return;
+                    let wrapped;
+                    if (name === 'writeText') {
+                        wrapped = function (content) {
+                            if (state.title && state.expires >= Date.now()) content = format(state.title, content);
+                            return original.call(this, content);
+                        };
+                    } else {
+                        wrapped = function (items) {
+                            if (!state.title || state.expires < Date.now() || typeof ClipboardItem !== 'function') return original.call(this, items);
+                            try {
+                                const transformed = Array.from(items, item => {
+                                    const types = item && item.types;
+                                    if (!types || typeof types.includes !== 'function' || !types.includes('text/plain') || typeof item.getType !== 'function') return item;
+                                    const data = {};
+                                    types.forEach(type => {
+                                        const blob = item.getType(type);
+                                        data[type] = type === 'text/plain'
+                                            ? blob.then(value => typeof value.text === 'function' ? value.text() : '').then(value => new Blob([format(state.title, value)], {type: 'text/plain'}))
+                                            : blob;
+                                    });
+                                    return new ClipboardItem(data);
+                                });
+                                return original.call(this, transformed);
+                            } catch (error) {
+                                return original.call(this, items);
+                            }
+                        };
+                    }
+                    try {
+                        Object.defineProperty(wrapped, marker, {value: true});
+                        Object.defineProperty(clipboard, name, {configurable: true, writable: true, value: wrapped});
+                    } catch (error) {
                         try {
-                            GM_setClipboard(markdown, 'text');
-                            copied = true;
-                        } catch (error) {
-                            console.warn('写入 Markdown 剪贴板失败', error);
-                        }
+                            Object.defineProperty(prototype, name, {configurable: true, writable: true, value: wrapped});
+                        } catch (ignored) {}
                     }
-                    if (!copied && typeof clipboard.writeText === 'function') {
-                        clipboard.writeText(markdown).catch(function (error) {
-                            console.warn('写入 Markdown 剪贴板失败', error);
-                        });
-                    }
+                });
+            };
+
+            document.addEventListener(eventName, event => {
+                let request;
+                try {
+                    request = JSON.parse(event.detail);
+                } catch (error) {
+                    return;
                 }
-            }).catch(function () {
-                setTimeout(() => pollClipboard(request, attempt + 1), 100);
-            });
+                if (!request || typeof request.title !== 'string') return;
+                state.title = request.title;
+                state.expires = Number(request.expires) || 0;
+                patchClipboard();
+            }, true);
+            patchClipboard();
         };
+
+        let interceptorScript;
+        const appendInterceptor = () => {
+            const parent = document.documentElement || document.head || document.body;
+            if (!parent) return false;
+            try {
+                interceptorScript = document.createElement('script');
+                interceptorScript.textContent = `(${installPageClipboardInterceptor.toString()})();`;
+                parent.appendChild(interceptorScript);
+                interceptorScript.remove();
+                return true;
+            } catch (error) {
+                return false;
+            }
+        };
+        if (!appendInterceptor()) {
+            const observer = new MutationObserver(() => {
+                if (appendInterceptor()) observer.disconnect();
+            });
+            observer.observe(document, {childList: true, subtree: true});
+            setTimeout(() => observer.disconnect(), 5000);
+        }
+
         document.addEventListener('copy', function (event) {
             const request = pending;
-            if (!request || request.id !== requestSerial || request.expires < Date.now()) return;
+            if (!request || request.expires < Date.now()) return;
             pending = null;
             const clipboardData = event.clipboardData;
             if (!clipboardData) return;
@@ -672,12 +740,13 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             if (!menuItem || menuText.indexOf('复制为Markdown') === -1) return;
             const title = getPageTitle();
             if (!title) return;
-            const clipboard = navigator.clipboard;
-            const baseline = clipboard?.readText ? clipboard.readText().catch(() => '') : '';
-            const id = ++requestSerial;
-            const request = { id, title, baseline, expires: Date.now() + 2000 };
-            pending = request;
-            setTimeout(() => pollClipboard(request), 150);
+            const expires = Date.now() + 2000;
+            pending = {title, expires};
+            try {
+                document.dispatchEvent(new CustomEvent(eventName, {
+                    detail: JSON.stringify({title, expires})
+                }));
+            } catch (error) {}
         }, true);
     }
 
