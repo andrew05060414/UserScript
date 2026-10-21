@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化
-// @version      1.5.27
+// @version      1.5.28
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @author       X.I.U
@@ -15,6 +15,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_notification
+// @grant        window.onurlchange
 // @sandbox      JavaScript
 // @license      GPL-3.0 License
 // @run-at       document-start
@@ -491,16 +492,22 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             }
         }
 
-        if (location.pathname === '/' || location.pathname === '/hot' || location.pathname === '/follow') style += style_index;
-        if (menu_value('menu_darkMode') && menu_value('menu_darkModeType') === 1 && (location.pathname.indexOf('/special/') > -1 || location.pathname.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
+        // 与路径相关的样式：知乎是单页应用，站内跳转后需要重新计算
+        const pathStyle = () => {
+            let style = '';
+            if (location.pathname === '/' || location.pathname === '/hot' || location.pathname === '/follow') style += style_index;
+            if (menu_value('menu_darkMode') && menu_value('menu_darkModeType') === 1 && (location.pathname.indexOf('/special/') > -1 || location.pathname.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
 
-        // 宽屏显示
-        if (menu_value('menu_widescreenDisplayIndex')) style += style_widescreenDisplayIndex;
-        if (menu_value('menu_widescreenDisplayQuestion') && location.pathname.indexOf('/question/') > -1) style += style_widescreenDisplayQuestion;
-        if (menu_value('menu_widescreenDisplaySearch') && (location.pathname === '/search' || location.pathname.indexOf('/club/') > -1 || location.pathname.indexOf('/topic/') > -1)) style += style_widescreenDisplaySearch;
-        if (menu_value('menu_widescreenDisplayCollection') && location.pathname.indexOf('/collection/') > -1) style += style_widescreenDisplayCollection;
-        if (menu_value('menu_widescreenDisplayPost') && location.hostname.indexOf('zhuanlan') > -1 && location.pathname.indexOf('/edit') === -1 && location.pathname.indexOf('/write') === -1) style += style_widescreenDisplayPost;
-        if (menu_value('menu_widescreenDisplayPeople') && location.pathname.indexOf('/people/') > -1) style += style_widescreenDisplayPeople;
+            // 宽屏显示
+            if (menu_value('menu_widescreenDisplayIndex')) style += style_widescreenDisplayIndex;
+            if (menu_value('menu_widescreenDisplayQuestion') && location.pathname.indexOf('/question/') > -1) style += style_widescreenDisplayQuestion;
+            if (menu_value('menu_widescreenDisplaySearch') && (location.pathname === '/search' || location.pathname.indexOf('/club/') > -1 || location.pathname.indexOf('/topic/') > -1)) style += style_widescreenDisplaySearch;
+            if (menu_value('menu_widescreenDisplayCollection') && location.pathname.indexOf('/collection/') > -1) style += style_widescreenDisplayCollection;
+            if (menu_value('menu_widescreenDisplayPost') && location.hostname.indexOf('zhuanlan') > -1 && location.pathname.indexOf('/edit') === -1 && location.pathname.indexOf('/write') === -1) style += style_widescreenDisplayPost;
+            if (menu_value('menu_widescreenDisplayPeople') && location.pathname.indexOf('/people/') > -1) style += style_widescreenDisplayPeople;
+
+            return style;
+        };
 
         // 调整图片最大高度
         if (menu_value('menu_picHeight')) style += style_4;
@@ -510,7 +517,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         const appendStyle = () => {
             const root = document.documentElement;
             if (!root) return false;
-            root.appendChild(style_Add).textContent = style;
+            root.appendChild(style_Add).textContent = style + pathStyle();
             return true;
         };
         if (!appendStyle()) { // document-start 时 html 可能尚未创建
@@ -519,6 +526,18 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             });
             observer.observe(document, {childList: true});
         }
+
+        // 站内跳转（pushState）后按新路径重算样式
+        let lastPath = location.hostname + location.pathname;
+        const refreshPathStyle = () => {
+            const now = location.hostname + location.pathname;
+            if (now === lastPath) return;
+            lastPath = now;
+            style_Add.textContent = style + pathStyle();
+        };
+        if (window.onurlchange === null) window.addEventListener('urlchange', refreshPathStyle);
+        window.addEventListener('popstate', refreshPathStyle);
+        setInterval(refreshPathStyle, 500); // 兜底：沙箱环境下可能收不到页面的 pushState
     }
 
     // 正文图片查看器：只接管非链接的正文静态图片；知乎 GIF 未暴露 video 源时保留原生播放。
