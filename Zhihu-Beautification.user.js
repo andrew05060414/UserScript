@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         知乎美化
+// @name         知乎美化（Andrew 自用）
 // @version      1.5.28
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
