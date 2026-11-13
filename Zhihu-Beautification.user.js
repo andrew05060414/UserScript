@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化（Andrew 自用）
-// @version      1.5.28
+// @version      1.5.29
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @author       X.I.U
@@ -448,17 +448,26 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                 style_darkMode_4 = style_darkMode_4_firefox
             }
 
-            // 如果开启了 [暗黑模式跟随浏览器] 且 当前浏览器是暗黑模式
-            if (menu_value('menu_darkModeAuto') && !window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                // 如果是暗黑模式，则需要改为白天模式
-                if (getTheme() === 'dark') {
-                    setTheme('light');
+            const browserDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (menu_value('menu_darkModeAuto') && menu_value('menu_darkModeType') === 1) {
+                // 方案 1 + 跟随浏览器：交给知乎自带的"跟随系统"模式，浏览器深浅色切换时页面也会实时跟着变
+                if (getThemeMode() !== 'system') {
+                    setTheme(browserDark ? 'dark' : 'light', 'system');
                 }
+                if (browserDark && location.pathname.indexOf('/log') > -1) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    style_darkMode_1 += style_darkMode_1_x;
+                }
+                // 样式都限定在 html[data-theme=dark] 下，浏览器为浅色时不会生效
+                if (!(location.hostname.indexOf('zhuanlan') > -1 && (location.pathname.indexOf('/edit') > -1 || location.pathname.indexOf('/write') > -1))) style += style_darkMode_1;
+            } else if (menu_value('menu_darkModeAuto') && !browserDark) {
+                // 开启了 [暗黑模式跟随浏览器] 但当前浏览器是浅色：确保知乎是白天模式
+                ensureLight();
             } else {
                 // 如果暗黑模式为 1
                 if (menu_value('menu_darkModeType') === 1) {
-                    // 如果当前知乎主题为白天模式，那就是改为暗黑模式
-                    if (getTheme() === 'light') {
+                    // 如果当前知乎主题为白天模式（或仍处于跟随系统模式），那就是改为手动暗黑模式
+                    if (getTheme() === 'light' || getThemeMode() === 'system') {
                         setTheme('dark');
                     }
                     // 如果是问题日志页，则改为暗黑模式
@@ -467,9 +476,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                         style_darkMode_1 += style_darkMode_1_x;
                     }
                 } else { // 如果是其他暗黑模式，则需要确保为白天模式
-                    if (getTheme() === 'dark') {
-                        setTheme('light');
-                    }
+                    ensureLight();
                 }
                 switch(menu_value('menu_darkModeType')) {
                     case 1:
@@ -487,9 +494,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                 }
             }
         } else {
-            if (getTheme() === 'dark'){
-                setTheme('light');
-            }
+            ensureLight();
         }
 
         // 与路径相关的样式：知乎是单页应用，站内跳转后需要重新计算
@@ -800,31 +805,41 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         }, false);
     }
 
-    // 获取知乎 Cookie 中的主题类型
-    function getTheme() {
-        let name = 'theme=',
-            ca = document.cookie.split(';');
-        for (let i=0; i<ca.length; i++) {
-            let c = ca[i].trim();
-            if (c.indexOf(name)==0) return c.substring(name.length,c.length);
-        }
-        return 'light';
+    // 知乎自己的主题系统（2026-11 确认）：读 themeApp（light/dark）和 themeModeApp（manual/system）两个 Cookie，
+    // 页面加载后由前端重算 data-theme。旧的 theme Cookie 已被忽略，只写它会"先变暗、一瞬间又变白"。
+    function readCookie(name) {
+        const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : '';
     }
 
-    // 修改知乎 Cookie 中的主题类型
-    function setTheme(theme) {
+    function writeCookie(name, value) {
+        // 与知乎一致：domain=.zhihu.com、保存 400 天，www / zhuanlan 共用
+        document.cookie = `${name}=${encodeURIComponent(value)}; max-age=34560000; path=/; domain=.zhihu.com`;
+    }
+
+    // 获取知乎 Cookie 中的主题类型（light / dark）
+    function getTheme() {
+        return readCookie('themeApp') === 'dark' ? 'dark' : 'light';
+    }
+
+    // 获取知乎 Cookie 中的主题模式（manual = 手动指定，system = 跟随系统/浏览器）
+    function getThemeMode() {
+        return readCookie('themeModeApp') === 'system' ? 'system' : 'manual';
+    }
+
+    // 修改知乎 Cookie 中的主题；mode 缺省为 manual。写入后回读确认成功才刷新，避免写不进去时无限刷新
+    function setTheme(theme, mode = 'manual') {
         const root = document.documentElement;
-        switch(theme) {
-            case 'light':
-                document.cookie='theme=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-                if (root) root.setAttribute('data-theme', 'light');
-                location.reload(); // 刷新网页
-                break;
-            case 'dark':
-                document.cookie='theme=dark; expires=Thu, 18 Dec 2031 12:00:00 GMT; path=/';
-                if (root) root.setAttribute('data-theme', 'dark');
-                if (GM_getValue('menu_darkMode')) location.reload(); // 刷新网页
-                break;
-        }
+        writeCookie('themeApp', theme === 'dark' ? 'dark' : 'light');
+        writeCookie('themeModeApp', mode);
+        if (root) root.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+        const written = getTheme() === (theme === 'dark' ? 'dark' : 'light') && getThemeMode() === mode;
+        if (!written) return;
+        if (theme === 'light' || mode === 'system' || GM_getValue('menu_darkMode')) location.reload(); // 刷新网页
+    }
+
+    // 确保是浅色且手动模式（方案 2~4 用滤镜变暗，不能让知乎同时进入原生暗色）
+    function ensureLight() {
+        if (getTheme() === 'dark' || getThemeMode() === 'system') setTheme('light');
     }
 })();
