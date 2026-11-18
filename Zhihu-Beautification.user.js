@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         知乎美化（Andrew 自用）
-// @version      1.5.29
+// @version      1.6.0
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @author       X.I.U
@@ -200,6 +200,7 @@
 
     // 添加样式
     function addStyle() {
+        const wsWidth = Number(GM_getValue('menu_widescreenDisplayWidth')) || 1000;
         let style = `/* 屏蔽登录提示（问题页中间的元素） */
 .Question-mainColumnLogin {display: none !important;}
 /* 屏蔽回答页/首页广告 */
@@ -213,65 +214,119 @@ div[class*="ManuscriptIntro-root-"] {user-select: auto !important;}
 .TopstoryItem--advertCard {display: none !important;}
 /* 屏蔽首页活动广告 */
 main.App-main > .Topstory > div:not(.Topstory-container) {display: none !important;}
-html[data-theme="light"] header.AppHeader {background-color: #ffffff !important; -webkit-box-shadow: 0 1px 3px rgba(18,18,18,.1) !important; box-shadow: 0 1px 3px rgba(18,18,18,.1) !important;}
-html[data-theme="light"] header.AppHeader a[aria-label="知乎"] svg {filter: invert(57%) sepia(71%) saturate(949%) hue-rotate(190deg) brightness(86%) contrast(188%) !important;}
-html[data-theme="light"] .AppHeader-TabsLink {color: #8590a6 !important; font-weight: normal !important;}
-html[data-theme="light"] .AppHeader-userInfo Button svg, .SearchBar-searchButton svg {color: inherit !important;}
-html[data-theme="light"] .AppHeader-userInfo button>div {color: #8590a6 !important;}
-html[data-theme="light"] .Input-wrapper.Input-wrapper--grey {background: #f6f6f6 !important;}
-html[data-theme="light"] .SearchBar input {color: #121212 !important;}
-html[data-theme="light"] .SearchBar input::placeholder, html[data-theme="light"] .SearchBar input::-webkit-input-placeholder, html[data-theme="light"] {color: #919baf !important;}
-html[data-theme="light"] .Button--primary.Button--blue {color: #fff !important;background-color: #06f !important;}
+html[data-theme="light"]:not(:has(aside nav)) header.AppHeader {background-color: #ffffff !important; -webkit-box-shadow: 0 1px 3px rgba(18,18,18,.1) !important; box-shadow: 0 1px 3px rgba(18,18,18,.1) !important;}
+html[data-theme="light"]:not(:has(aside nav)) header.AppHeader a[aria-label="知乎"] svg {filter: invert(57%) sepia(71%) saturate(949%) hue-rotate(190deg) brightness(86%) contrast(188%) !important;}
+html[data-theme="light"]:not(:has(aside nav)) .AppHeader-TabsLink {color: #8590a6 !important; font-weight: normal !important;}
+html[data-theme="light"]:not(:has(aside nav)) .AppHeader-userInfo Button svg, html[data-theme="light"]:not(:has(aside nav)) .SearchBar-searchButton svg {color: inherit !important;}
+html[data-theme="light"]:not(:has(aside nav)) .AppHeader-userInfo button>div {color: #8590a6 !important;}
+html[data-theme="light"]:not(:has(aside nav)) .Input-wrapper.Input-wrapper--grey {background: #f6f6f6 !important;}
+html[data-theme="light"]:not(:has(aside nav)) .SearchBar input {color: #121212 !important;}
+html[data-theme="light"]:not(:has(aside nav)) .SearchBar input::placeholder, html[data-theme="light"]:not(:has(aside nav)) .SearchBar input::-webkit-input-placeholder {color: #919baf !important;}
+html[data-theme="light"]:not(:has(aside nav)) .Button--primary.Button--blue {color: #fff !important;background-color: #06f !important;}
 /* 右上角 通知/私信 红点颜色 */
-html[data-theme=light] .AppHeader-notifications:not([aria-label=通知])>div:first-of-type, html[data-theme=light] .AppHeader-messages:not([aria-label=私信])>div:first-of-type {color: #ffffff !important;border: 2px solid #ffffff !important;}
-
-            `,
-            style_widescreenDisplayIndex = `/* 宽屏显示 - 首页 */
-.Topstory-mainColumn, .QuestionWaiting-mainColumn {width: inherit !important;}
-.Topstory-mainColumn~div,[data-za-detail-view-path-module="RightSideBar"] {display: none !important;}
-.Topstory-container {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Topstory-container {width: 97% !important;}}
+html[data-theme=light]:not(:has(aside nav)) .AppHeader-notifications:not([aria-label=通知])>div:first-of-type, html[data-theme=light]:not(:has(aside nav)) .AppHeader-messages:not([aria-label=私信])>div:first-of-type {color: #ffffff !important;border: 2px solid #ffffff !important;}
 `,
-            style_widescreenDisplayQuestion = `/* 宽屏显示 - 问题页 */
-.Question-mainColumn, .ListShortcut, .QuestionWaiting-mainColumn {width: 100% !important;}
-.Question-mainColumn+div,[data-za-detail-view-path-module="RightSideBar"], .Question-sideColumn, .GlobalSideBar {display: none !important;}
-.QuestionWaiting-mainColumn {margin-right: 0 !important;}
-.Question-main {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Question-main {width: auto !important;}}
-@media only screen and (max-width: ${GM_getValue('menu_widescreenDisplayWidth')-100}px) {.Question-main {width: 98.5% !important;}}
-.QuestionPage > div:has(.Question-mainColumn) {width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important;}
-.QuestionPage > div:has(.Question-mainColumn) .Question-mainColumn,
-.QuestionPage > div:has(.ListShortcut > .Question-mainColumn) .ListShortcut {width: 100% !important;max-width: none !important;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.QuestionPage > div:has(.Question-mainColumn) {width: 97.5% !important;}}
+            style_widescreenTShape = `/* 新版知乎 T-Shape 左侧栏布局统一宽屏适配 */
+html:has(aside nav) {
+    --zh-ws-pad-x: clamp(24px, 3.5vw, 56px);
+    --container-main-column-padding-x: var(--zh-ws-pad-x) !important;
+    --container-main-column-width: min(${wsWidth}px, calc(100vw - var(--sidenav-width, 0px) - 80px - 2 * var(--zh-ws-pad-x))) !important;
+    --container-width: calc(var(--container-main-column-width) + 2 * var(--container-main-column-padding-x)) !important;
+    --right-sidebar-width: 0px !important;
+}
+html:has(aside nav) div:has(> main.App-main) + aside,
+html:has(aside nav) [data-za-detail-view-path-module="RightSideBar"],
+html:has(aside nav) [data-za-module="RightSideBar"],
+html:has(aside nav) .Question-sideColumn,
+html:has(aside nav) .GlobalSideBar,
+html:has(aside nav) .ContentLayout-sideColumn,
+html:has(aside nav) .Profile-sideColumn,
+html:has(aside nav) .ClubSideBar,
+html:has(aside nav) .SearchMain + div,
+html:has(aside nav) .Topstory-mainColumn ~ div,
+html:has(aside nav) .CollectionsDetailPage-mainColumn + div,
+html:has(aside nav) .App-main > [data-za-detail-view-path-module="TopicItem"] > div:not(:first-child) {
+    display: none !important;
+}
+html:has(aside nav) .QuestionPage {
+    --app-width: var(--container-main-column-width) !important;
+}
+html:has(aside nav) .Topstory-container,
+html:has(aside nav) .Search-container,
+html:has(aside nav) .ContentLayout,
+html:has(aside nav) .Club-container,
+html:has(aside nav) .CollectionsDetailPage,
+html:has(aside nav) .Profile-main,
+html:has(aside nav) #ProfileHeader,
+html:has(aside nav) .HotList,
+html:has(aside nav) .App-main > [data-za-detail-view-path-module="TopicItem"] {
+    width: calc(var(--container-main-column-width) + 2 * var(--container-main-column-padding-x)) !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+html:has(aside nav) .Topstory-mainColumn,
+html:has(aside nav) .Question-mainColumn,
+html:has(aside nav) .QuestionWaiting-mainColumn,
+html:has(aside nav) .ListShortcut,
+html:has(aside nav) .SearchMain,
+html:has(aside nav) .ContentLayout-mainColumn,
+html:has(aside nav) .Club-mainColumn,
+html:has(aside nav) .CollectionsDetailPage-mainColumn,
+html:has(aside nav) .Profile-mainColumn,
+html:has(aside nav) .App-main > [data-za-detail-view-path-module="TopicItem"] > div:first-child {
+    width: var(--container-main-column-width) !important;
+    max-width: 100% !important;
+}
+html:has(aside nav) .AuthorInfo {
+    max-width: 100% !important;
+}
+`,
+            style_widescreenDisplayIndex = `/* 宽屏显示 - 首页（经典布局） */
+html:not(:has(aside nav)) .Topstory-mainColumn, html:not(:has(aside nav)) .QuestionWaiting-mainColumn {width: inherit !important;}
+html:not(:has(aside nav)) .Topstory-mainColumn~div, html:not(:has(aside nav)) [data-za-detail-view-path-module="RightSideBar"] {display: none !important;}
+html:not(:has(aside nav)) .Topstory-container {width: ${wsWidth}px;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .Topstory-container {width: 97% !important;}}
+`,
+            style_widescreenDisplayQuestion = `/* 宽屏显示 - 问题页（经典布局） */
+html:not(:has(aside nav)) .Question-mainColumn, html:not(:has(aside nav)) .ListShortcut, html:not(:has(aside nav)) .QuestionWaiting-mainColumn {width: 100% !important;}
+html:not(:has(aside nav)) .Question-mainColumn+div, html:not(:has(aside nav)) [data-za-detail-view-path-module="RightSideBar"], html:not(:has(aside nav)) .Question-sideColumn, html:not(:has(aside nav)) .GlobalSideBar {display: none !important;}
+html:not(:has(aside nav)) .QuestionWaiting-mainColumn {margin-right: 0 !important;}
+html:not(:has(aside nav)) .Question-main {width: ${wsWidth}px;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .Question-main {width: auto !important;}}
+@media only screen and (max-width: ${wsWidth - 100}px) {html:not(:has(aside nav)) .Question-main {width: 98.5% !important;}}
+html:not(:has(aside nav)) .QuestionPage > div:has(.Question-mainColumn) {width: ${wsWidth}px !important;}
+html:not(:has(aside nav)) .QuestionPage > div:has(.Question-mainColumn) .Question-mainColumn,
+html:not(:has(aside nav)) .QuestionPage > div:has(.ListShortcut > .Question-mainColumn) .ListShortcut {width: 100% !important;max-width: none !important;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .QuestionPage > div:has(.Question-mainColumn) {width: 97.5% !important;}}
 .AuthorInfo {max-width: 100% !important;}
 `,
-            style_widescreenDisplaySearch = `/* 宽屏显示 - 搜索页 */
-.SearchMain, .ContentLayout-mainColumn, .Club-mainColumn, .Post-mainColumn, [data-za-detail-view-path-module=TopicItem]>div:first-child {width: inherit !important;}
-.SearchMain+div, .ContentLayout-sideColumn, .Card.QuestionHeaderTopicMeta, .ClubSideBar, [data-za-detail-view-path-module=TopicItem]>div:not(:first-child) {display: none !important;}
-.Search-container, .ContentLayout, .Club-container, .Post-container, [data-za-detail-view-path-module=TopicItem] {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Search-container, .ContentLayout, .Club-container, .Post-container, [data-za-detail-view-path-module=TopicItem] {width: 97.5% !important;}}
+            style_widescreenDisplaySearch = `/* 宽屏显示 - 搜索页（经典布局） */
+html:not(:has(aside nav)) .SearchMain, html:not(:has(aside nav)) .ContentLayout-mainColumn, html:not(:has(aside nav)) .Club-mainColumn, html:not(:has(aside nav)) .Post-mainColumn, html:not(:has(aside nav)) .App-main > [data-za-detail-view-path-module=TopicItem]>div:first-child {width: inherit !important;}
+html:not(:has(aside nav)) .SearchMain+div, html:not(:has(aside nav)) .ContentLayout-sideColumn, html:not(:has(aside nav)) .Card.QuestionHeaderTopicMeta, html:not(:has(aside nav)) .ClubSideBar, html:not(:has(aside nav)) .App-main > [data-za-detail-view-path-module=TopicItem]>div:not(:first-child) {display: none !important;}
+html:not(:has(aside nav)) .Search-container, html:not(:has(aside nav)) .ContentLayout, html:not(:has(aside nav)) .Club-container, html:not(:has(aside nav)) .Post-container, html:not(:has(aside nav)) .App-main > [data-za-detail-view-path-module=TopicItem] {width: ${wsWidth}px;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .Search-container, html:not(:has(aside nav)) .ContentLayout, html:not(:has(aside nav)) .Club-container, html:not(:has(aside nav)) .Post-container, html:not(:has(aside nav)) .App-main > [data-za-detail-view-path-module=TopicItem] {width: 97.5% !important;}}
 `,
-            style_widescreenDisplayCollection = `/* 宽屏显示 - 收藏页 */
-.CollectionsDetailPage-mainColumn {width: inherit !important;}
-.CollectionsDetailPage-mainColumn+div {display: none !important;}
-.CollectionsDetailPage {width: ${GM_getValue('menu_widescreenDisplayWidth')}px;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.CollectionsDetailPage {width: 98.5% !important;}}
+            style_widescreenDisplayCollection = `/* 宽屏显示 - 收藏页（经典布局） */
+html:not(:has(aside nav)) .CollectionsDetailPage-mainColumn {width: inherit !important;}
+html:not(:has(aside nav)) .CollectionsDetailPage-mainColumn+div {display: none !important;}
+html:not(:has(aside nav)) .CollectionsDetailPage {width: ${wsWidth}px;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .CollectionsDetailPage {width: 98.5% !important;}}
 `,
             style_widescreenDisplayPost = `/* 宽屏显示 - 文章页 */
 .Post-content {min-width: auto !important;}
 .Post-SideActions {left: calc(10vw) !important;}
 .Post-Row-Content-right, .Post-content > div:has(.Post-Main) > div:nth-child(2) {display: none !important;}
-.Post-Row-Content, .Post-content > div:has(.Post-Main) {box-sizing: border-box !important; width: calc(${GM_getValue('menu_widescreenDisplayWidth')}px + 72px) !important; max-width: 100% !important;}
-.Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child {box-sizing: border-box !important; width: calc(${GM_getValue('menu_widescreenDisplayWidth')}px + 40px) !important; max-width: 100% !important;}
-.Post-Main, .Post-Header, .RichContent-actions {box-sizing: border-box !important; width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important; max-width: 100% !important;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+122}px) {.Post-Row-Content, .Post-content > div:has(.Post-Main) {width: 98% !important;} .Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child, .Post-Main, .Post-Header, .RichContent-actions {width: 100% !important; max-width: 100% !important;}}
+.Post-Row-Content, .Post-content > div:has(.Post-Main) {box-sizing: border-box !important; width: calc(${wsWidth}px + 72px) !important; max-width: 100% !important;}
+.Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child {box-sizing: border-box !important; width: calc(${wsWidth}px + 40px) !important; max-width: 100% !important;}
+.Post-Main, .Post-Header, .RichContent-actions {box-sizing: border-box !important; width: ${wsWidth}px !important; max-width: 100% !important;}
+@media only screen and (max-width: ${wsWidth + 122}px) {.Post-Row-Content, .Post-content > div:has(.Post-Main) {width: 98% !important;} .Post-Row-Content-left, .Post-content > div:has(.Post-Main) > div:first-child, .Post-content > div:has(.Post-Main) > div:first-child > div:first-child, .Post-Main, .Post-Header, .RichContent-actions {width: 100% !important; max-width: 100% !important;}}
 `,
-            style_widescreenDisplayPeople = `/* 宽屏显示 - 用户主页 */
-.Profile-mainColumn {width: inherit !important;}
-.Profile-mainColumn+div,[data-za-module="RightSideBar"],.Profile-sideColumn {display: none !important;}
-.Profile-main, #ProfileHeader {width: ${GM_getValue('menu_widescreenDisplayWidth')}px !important;}
-@media only screen and (max-width: ${Number(GM_getValue('menu_widescreenDisplayWidth'))+50}px) {.Profile-main, #ProfileHeader {width: auto !important;}}
-@media only screen and (max-width: ${GM_getValue('menu_widescreenDisplayWidth')-100}px) {.Profile-main, #ProfileHeader {width: 98.5% !important;}}
+            style_widescreenDisplayPeople = `/* 宽屏显示 - 用户主页（经典布局） */
+html:not(:has(aside nav)) .Profile-mainColumn {width: inherit !important;}
+html:not(:has(aside nav)) .Profile-mainColumn+div, html:not(:has(aside nav)) [data-za-module="RightSideBar"], html:not(:has(aside nav)) .Profile-sideColumn {display: none !important;}
+html:not(:has(aside nav)) .Profile-main, html:not(:has(aside nav)) #ProfileHeader {width: ${wsWidth}px !important;}
+@media only screen and (max-width: ${wsWidth + 50}px) {html:not(:has(aside nav)) .Profile-main, html:not(:has(aside nav)) #ProfileHeader {width: auto !important;}}
+@media only screen and (max-width: ${wsWidth - 100}px) {html:not(:has(aside nav)) .Profile-main, html:not(:has(aside nav)) #ProfileHeader {width: 98.5% !important;}}
 `,
             style_2 = `/* 隐藏在各列表中查看文章时开头显示的大图，不影响文章、专栏页面 */
 .RichContent img.ArticleItem-image {display: none !important;}
@@ -283,10 +338,29 @@ html[data-theme=light] .AppHeader-notifications:not([aria-label=通知])>div:fir
 .ztext .content_image, .ztext .origin_image, .GifPlayer img {max-height: 500px !important;width: auto !important;}
 `,
             style_darkMode_1 = `/* 暗黑模式（方案 1） */
+/* 新版 T-Shape 布局 CSS 变量统一为 GitHub Dimmed 柔和暗色 */
+html[data-theme=dark] {
+    --GBK99A: #22272E !important;
+    --GBK10C: #272D36 !important;
+    --GBK09A: #373E47 !important;
+    --MapUIFrame99A: #2D333B !important;
+    --MapUIFrame99C: #2D333B !important;
+    --MapUIFrame10C: #323942 !important;
+    --MapUIFrame09A: #373E47 !important;
+    --MapText01A: #d0d7de !important;
+    --MapText02A: #adbac7 !important;
+    --MapText03A: #909dab !important;
+    --MapText04A: #768390 !important;
+    --MapText05A: #768390 !important;
+    --MapText06A: #636e7b !important;
+}
+/* 经典布局首页工具条宽度 */
+html[data-theme=dark]:not(:has(aside nav)) .Card.TopstoryItem.TopstoryItem-isRecommend .ContentItem-actions, html[data-theme=dark]:not(:has(aside nav)) .Card.TopstoryItem.TopstoryItem-isFollow .ContentItem-actions {margin: 0 -16px -10px;}
 /* 右上角 通知/私信 红点颜色 */
 html[data-theme=dark] .AppHeader-notifications:not([aria-label=通知])>div:first-of-type, html[data-theme=dark] .AppHeader-messages:not([aria-label=私信])>div:first-of-type {color: #ffffff !important;border: 2px solid #2d333b !important;}
 /* 文字颜色 */
-html[data-theme=dark] body, html[data-theme=dark] .ContentItem-title, html[data-theme=dark] .QuestionHeader-title, html[data-theme=dark] .Tabs-link, html[data-theme=dark] .CreatorEntrance-title, html[data-theme=dark] .Search-container, html[data-theme=dark] .HotItem-excerpt, html[data-theme=dark] .PushNotifications-item, html[data-theme=dark] .Notifications-Main>header h1, html[data-theme=dark] .Notifications-Section-header h2, html[data-theme=dark] .NotificationList-Item-content, html[data-theme=dark] .Reward, html[data-theme=dark] .ChatSideBar-Search-Input input, html[data-theme=dark] input.Input, html[data-theme=dark] .LinkCard-title, html[data-theme=dark] .MCNLinkCard-title, html[data-theme=dark] .ZVideoLinkCard-title, html[data-theme=dark] .TipjarDialog-customButton, html[data-theme=dark] .Question-mainColumn .Card:not(.AnswersNavWrapper) a[data-za-detail-view-id] > div:last-child, html[data-theme=dark] .TextArea {color: #adbac7 !important;}
+html[data-theme=dark] body, html[data-theme=dark] .ContentItem-title, html[data-theme=dark] .QuestionHeader-title, html[data-theme=dark] [data-zop-question] > h1, html[data-theme=dark] .Tabs-link, html[data-theme=dark] .CreatorEntrance-title, html[data-theme=dark] .Search-container, html[data-theme=dark] .HotItem-excerpt, html[data-theme=dark] .PushNotifications-item, html[data-theme=dark] .Notifications-Main>header h1, html[data-theme=dark] .Notifications-Section-header h2, html[data-theme=dark] .NotificationList-Item-content, html[data-theme=dark] .Reward, html[data-theme=dark] .ChatSideBar-Search-Input input, html[data-theme=dark] input.Input, html[data-theme=dark] .LinkCard-title, html[data-theme=dark] .MCNLinkCard-title, html[data-theme=dark] .ZVideoLinkCard-title, html[data-theme=dark] .TipjarDialog-customButton, html[data-theme=dark] .Question-mainColumn .Card:not(.AnswersNavWrapper) a[data-za-detail-view-id] > div:last-child, html[data-theme=dark] .TextArea {color: #adbac7 !important;}
+html[data-theme=dark] [data-zop-question] > h1 {color: #d0d7de !important;}
 html[data-theme=dark] .LinkCard-meta, html[data-theme=dark] .MCNLinkCard-source {color: #5a6f83 !important;}
 /* 热榜标题 */
 html[data-theme=dark] .HotItem-title {color: #c4cfda !important;}
@@ -297,8 +371,22 @@ html[data-theme=dark] .Highlight em {color: #c33c39 !important;}
 
 /* 背景颜色 - 网页 */
 html[data-theme=dark] body, html[data-theme=dark] .Select-option:focus {background: #22272E !important;}
-/* 背景颜色 - 问题 */
+/* 背景颜色 - 问题与卡片 */
 html[data-theme=dark] .AppHeader, html[data-theme=dark] .QuestionHeader, html[data-theme=dark] .QuestionHeader-footer, html[data-theme=dark] .EmoticonsFooter-item--selected, html[data-theme=dark] .Card, html[data-theme=dark] .Question-mainColumn .Card .Sticky.is-bottom, html[data-theme=dark] .ContentItem-actions, html[data-theme=dark] .MoreAnswers .List-headerText, html[data-theme=dark] .CommentsV2-withPagination, html[data-theme=dark] .Topbar, html[data-theme=dark] .CommentsV2-footer, html[data-theme=dark] .CommentEditorV2-inputWrap--active, html[data-theme=dark] .InputLike, html[data-theme=dark] .InputLike + div div, html[data-theme=dark] .Popover-content, html[data-theme=dark] .Notifications-footer, html[data-theme=dark] .Messages-footer, html[data-theme=dark] .Modal-inner, html[data-theme=dark] .Emoticons, html[data-theme=dark] .EmoticonsFooter, html[data-theme=dark] .SearchTabs, html[data-theme=dark] .Popover-arrow:after, html[data-theme=dark] .CommentEditorV2-inputWrap, html[data-theme=dark] .ProfileHeader-wrapper, html[data-theme=dark] .UserCover, html[data-theme=dark] .AnswerForm-footer, html[data-theme=dark] .Editable-toolbar, html[data-theme=dark] .AnswerForm-fullscreenContent .Editable-toolbar, html[data-theme=dark] .KfeCollection-PcCollegeCard-wrapper, html[data-theme=dark] .KfeCollection-PcCollegeCard-root, html[data-theme=dark] .HotItem, html[data-theme=dark] .HotList, html[data-theme=dark] .HotListNavEditPad, html[data-theme=dark] .QuestionWaiting-typesTopper, html[data-theme=dark] .QuestionWaiting-types, html[data-theme=dark] .PostItem, html[data-theme=dark] .ClubSideBar section, html[data-theme=dark] .SearchSubTabs, html[data-theme=dark] .Club-SearchPosts-Content, html[data-theme=dark] .Club-content, html[data-theme=dark] .ClubJoinOrCheckinButton, html[data-theme=dark] .ClubEdit, html[data-theme=dark] .CornerButton, html[data-theme=dark] .Notifications-Section-header, html[data-theme=dark] .NotificationList, .NotificationList-Item.NotificationList-Item:after, .NotificationList-DateSplit.NotificationList-DateSplit:after, html[data-theme=dark] .Chat, .ChatUserListItem:after, .ChatListGroup-SectionTitle--bottomBorder:after, html[data-theme=dark] .ActionMenu, .ChatSideBar-Search--active, html[data-theme=dark] .ChatSideBar-Search-ResultListWrap, html[data-theme=dark] .QuestionMainDivider-inner, html[data-theme=dark] .Topic-bar, html[data-theme=dark] .AnnotationTag, html[data-theme=dark] .HoverCard, html[data-theme=dark] .HoverCard-loading, html[data-theme=dark] .ExploreSpecialCard, html[data-theme=dark] .ExploreHomePage-ContentSection-moreButton a, html[data-theme=dark] .ExploreRoundtableCard, html[data-theme=dark] .ExploreCollectionCard, html[data-theme=dark] .ExploreColumnCard, html[data-theme=dark] .RichText .lazy[data-lazy-status], html[data-theme=dark] #TopstoryContent > div:first-child, html[data-theme=dark] .Topstory-newUserFollowCountPanel, html[data-theme=dark] .AnswerForm-fullscreenContent .RichText, html[data-theme=dark] .Club-Search-Content, html[data-theme=dark] .WriteIndexLayout .Sticky {background: #2D333B !important;}
+/* 新版 T-Shape 平铺阅读流背景统一（避免顶栏/问题描述/回答卡片三截拼色） */
+html[data-theme=dark]:has(aside nav) header.AppHeader {background: #2D333B !important; border-bottom: 1px solid #373E47 !important; box-shadow: none !important;}
+html[data-theme=dark]:has(aside nav) header.AppHeader .SearchBar-input {background: #22272E !important; border-color: #444c56 !important;}
+html[data-theme=dark]:has(aside nav) aside nav {background: #2D333B !important;}
+html[data-theme=dark]:has(aside nav) aside nav a[aria-current="page"], html[data-theme=dark]:has(aside nav) aside nav a:hover, html[data-theme=dark]:has(aside nav) aside nav button:hover {background-color: #373E47 !important; color: #d0d7de !important;}
+html[data-theme=dark]:has(aside nav) main.App-main .Question-mainColumn .Card,
+html[data-theme=dark]:has(aside nav) main.App-main .Question-mainColumn .Topbar,
+html[data-theme=dark]:has(aside nav) main.App-main .Topstory-mainColumn .Card,
+html[data-theme=dark]:has(aside nav) main.App-main #TopstoryContent > div:first-child,
+html[data-theme=dark]:has(aside nav) main.App-main .SearchMain .Card,
+html[data-theme=dark]:has(aside nav) main.App-main .HotList,
+html[data-theme=dark]:has(aside nav) main.App-main .HotItem,
+html[data-theme=dark]:has(aside nav) main.App-main .ContentItem-actions:not(.is-fixed) {background: transparent !important;}
+html[data-theme=dark]:has(aside nav) main.App-main .ContentItem-actions.is-fixed {background: #2D333B !important; border-top: 1px solid #373E47 !important;}
 html[data-theme=dark] .CommentListV2-header-divider, html[data-theme=dark] .CommentsV2-openComment-divider, html[data-theme=dark] .AnswerForm-fullscreenScroller, html[data-theme=dark] .HotListNav-item, html[data-theme=dark] .AutoInviteItem-wrapper--desktop, html[data-theme=dark] .ExploreSpecialCard-contentTag, html[data-theme=dark] .ExploreCollectionCard-contentTypeTag, html[data-theme=dark] .Reward-TipjarDialog-tagLine, html[data-theme=dark] .AnswerForm-footer.useNewEditorSetting > div, html[data-theme=dark] .AnswerForm-fullscreenContent > div:first-child, html[data-theme=dark] .Editable-toolbar button:hover, html[data-theme=dark] .AuthorInfo.AnswerAdd-info + div {background-color: #222933 !important;}
 html[data-theme=dark] .CornerButton:hover {background: #3f4752 !important;} /* 右下角按钮 */
 
@@ -358,6 +446,7 @@ html[data-theme=dark] .GifPlayer img, html[data-theme=dark] .ImageView-img, html
 html[data-theme=dark] .Topbar, html[data-theme=dark] .CommentsV2-footer, html[data-theme=dark] .Topstory-mainColumnCard .Card:not(.Topstory-tabCard), html[data-theme=dark] .NestComment:not(:last-child):after, html[data-theme=dark] .NestComment--rootComment:after, html[data-theme=dark] .NestComment .NestComment--child:after, html[data-theme=dark] .NestComment .NestComment--child:after, html[data-theme=dark] .CommentsV2-replyNum, html[data-theme=dark] .CommentItemV2:not(:first-child):after, html[data-theme=dark] .Tabs, html[data-theme=dark] .Popover-arrow:after, html[data-theme=dark] .SelfCollectionItem-innerContainer, html[data-theme=dark] .CollectionDetailPageItem-innerContainer {border-bottom: 1px solid #282d35 !important;}
 html[data-theme=dark] .CommentEditorV2-inputWrap--active, html[data-theme=dark] .CommentEditorV2-inputWrap, html[data-theme=dark] .PostItem, html[data-theme=dark] .AnswerForm .Editable-toolbar, html[data-theme=dark] .Editable-toolbar span {border: none !important;}
 html[data-theme=dark] .InputLike {border: 1px solid #424b56 !important;}
+html[data-theme=dark] .Select-plainButton.InputLike {background: transparent !important; border: none !important;}
 html[data-theme=dark] .Popover .InputLike {border: 1px solid #2d333b !important;}
 html[data-theme=dark] .HotLanding-contentItem:not(:last-child) {border-bottom: 1px solid #424b56 !important;}
 html[data-theme=dark] .HotLanding-content {border-left: 2px solid #424b56 !important;}
@@ -500,16 +589,33 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         // 与路径相关的样式：知乎是单页应用，站内跳转后需要重新计算
         const pathStyle = () => {
             let style = '';
-            if (location.pathname === '/' || location.pathname === '/hot' || location.pathname === '/follow') style += style_index;
-            if (menu_value('menu_darkMode') && menu_value('menu_darkModeType') === 1 && (location.pathname.indexOf('/special/') > -1 || location.pathname.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
+            const path = location.pathname;
+            const isZhuanlan = location.hostname.indexOf('zhuanlan') > -1;
+            const isIndex = !isZhuanlan && (path === '/' || path === '/hot' || path === '/follow' || path === '/column-square' || path === '/ring-feeds' || path.indexOf('/question/waiting') === 0);
+            const isQuestion = !isZhuanlan && (path.indexOf('/question/') > -1 && path.indexOf('/question/waiting') === -1 || path.indexOf('/answer/') === 0);
+            const isSearch = !isZhuanlan && (path === '/search' || path.indexOf('/club/') > -1 || path.indexOf('/topic/') > -1);
+            const isCollection = !isZhuanlan && path.indexOf('/collection/') > -1;
+            const isPost = isZhuanlan && path.indexOf('/edit') === -1 && path.indexOf('/write') === -1;
+            const isPeople = !isZhuanlan && (path.indexOf('/people/') > -1 || path.indexOf('/org/') > -1);
+
+            if (path === '/' || path === '/hot' || path === '/follow') style += style_index;
+            if (menu_value('menu_darkMode') && menu_value('menu_darkModeType') === 1 && (path.indexOf('/special/') > -1 || path.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
 
             // 宽屏显示
+            const enableTShapeWs =
+                (isIndex && menu_value('menu_widescreenDisplayIndex')) ||
+                (isQuestion && menu_value('menu_widescreenDisplayQuestion')) ||
+                (isSearch && menu_value('menu_widescreenDisplaySearch')) ||
+                (isCollection && menu_value('menu_widescreenDisplayCollection')) ||
+                (isPeople && menu_value('menu_widescreenDisplayPeople'));
+            if (enableTShapeWs) style += style_widescreenTShape;
+
             if (menu_value('menu_widescreenDisplayIndex')) style += style_widescreenDisplayIndex;
-            if (menu_value('menu_widescreenDisplayQuestion') && location.pathname.indexOf('/question/') > -1) style += style_widescreenDisplayQuestion;
-            if (menu_value('menu_widescreenDisplaySearch') && (location.pathname === '/search' || location.pathname.indexOf('/club/') > -1 || location.pathname.indexOf('/topic/') > -1)) style += style_widescreenDisplaySearch;
-            if (menu_value('menu_widescreenDisplayCollection') && location.pathname.indexOf('/collection/') > -1) style += style_widescreenDisplayCollection;
-            if (menu_value('menu_widescreenDisplayPost') && location.hostname.indexOf('zhuanlan') > -1 && location.pathname.indexOf('/edit') === -1 && location.pathname.indexOf('/write') === -1) style += style_widescreenDisplayPost;
-            if (menu_value('menu_widescreenDisplayPeople') && location.pathname.indexOf('/people/') > -1) style += style_widescreenDisplayPeople;
+            if (menu_value('menu_widescreenDisplayQuestion') && isQuestion) style += style_widescreenDisplayQuestion;
+            if (menu_value('menu_widescreenDisplaySearch') && isSearch) style += style_widescreenDisplaySearch;
+            if (menu_value('menu_widescreenDisplayCollection') && isCollection) style += style_widescreenDisplayCollection;
+            if (menu_value('menu_widescreenDisplayPost') && isPost) style += style_widescreenDisplayPost;
+            if (menu_value('menu_widescreenDisplayPeople') && isPeople) style += style_widescreenDisplayPeople;
 
             return style;
         };
@@ -775,8 +881,17 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
     }
 
     function getPageTitle() {
+        const zopQuestion = document.querySelector('.QuestionPage [data-zop-question], [data-za-detail-view-path-module="QuestionDescription"] [data-zop-question]');
+        if (zopQuestion) {
+            try {
+                const parsed = JSON.parse(zopQuestion.getAttribute('data-zop-question') || '{}');
+                if (parsed && typeof parsed.title === 'string' && parsed.title.trim()) {
+                    return parsed.title.replace(/^#+\s*/, '').trim();
+                }
+            } catch (e) {}
+        }
         const titleElement = document.querySelector(
-            'h1.QuestionHeader-title, .QuestionHeader-title, [data-za-detail-view-path-module="QuestionHeader"] h1, h1.Post-Title, .Post-Title'
+            'h1.QuestionHeader-title, .QuestionHeader-title, .QuestionPage [data-zop-question] > h1, [data-za-detail-view-path-module="QuestionDescription"] [data-zop-question] h1, [data-za-detail-view-path-module="QuestionHeader"] h1, h1.Post-Title, .Post-Title'
         );
         const title = titleElement?.textContent.trim() || document.querySelector('meta[property="og:title"]')?.content?.trim() || document.title
             .replace(/\s*[-|｜]\s*(知乎专栏|知乎)\s*$/, '')
@@ -785,24 +900,17 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
     }
 
     function hideTitle() {
-        // 获取需要控制的元素
-        const floatingElement = document.getElementsByTagName('header')[0];
-        if (!floatingElement) return;
         let beforeScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 
-        window.addEventListener('scroll', function (e) {
+        window.addEventListener('scroll', function () {
+            const floatingElement = document.querySelector('header.AppHeader, header.ColumnPageHeader') || document.getElementsByTagName('header')[0];
+            if (!floatingElement) return;
             var afterScrollTop = document.documentElement.scrollTop || document.body.scrollTop,
                 delta = afterScrollTop - beforeScrollTop;
-            //console.log(delta,floatingElement)
-            if (delta == 0) return false;
-            if (delta > 0) {// 向下滚动 隐藏
-                floatingElement.hidden = true;
-            } else {
-                // 向上滚动 显示
-                floatingElement.hidden = false;
-            }
+            if (delta === 0) return false;
+            floatingElement.hidden = delta > 0 && afterScrollTop > 60;
             beforeScrollTop = afterScrollTop;
-        }, false);
+        }, { passive: true });
     }
 
     // 知乎自己的主题系统（2026-11 确认）：读 themeApp（light/dark）和 themeModeApp（manual/system）两个 Cookie，

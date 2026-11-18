@@ -3,7 +3,9 @@
 // @name:zh-CN   知乎增强
 // @name:zh-TW   知乎增強
 // @name:ru      Улучшение Zhihu
-// @version      2.3.29
+// @version      2.4.0
+// @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Enhanced.user.js
+// @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Enhanced.user.js
 // @author       X.I.U
 // @description  A more personalized Zhihu experience~
 // @description:zh-CN  移除登录弹窗、屏蔽指定类别（视频、盐选、文章、想法、关注[赞同/关注了XX]等）、屏蔽低赞/低评、屏蔽用户、屏蔽关键词、默认收起回答、快捷收起回答/评论（左键两侧）、快捷回到顶部（右键两侧）、区分问题文章、移除高亮链接、净化搜索热门、净化标题消息、展开问题描述、显示问题作者、默认高清原图（无水印）、置顶显示时间、完整问题时间、直达问题按钮、默认站外直链...
@@ -74,11 +76,10 @@ registerMenuCommand();
 
 // 注册脚本菜单
 function registerMenuCommand() {
-    if (menu_ID.length > menu_ALL.length){ // 如果菜单ID数组多于菜单数组，说明不是首次添加菜单，需要卸载所有脚本菜单
-        for (let i=0;i<menu_ID.length;i++){
-            GM_unregisterMenuCommand(menu_ID[i]);
-        }
+    for (const id of menu_ID) {
+        if (id !== undefined && id !== null) GM_unregisterMenuCommand(id);
     }
+    menu_ID.length = 0;
     for (let i=0;i<menu_ALL.length;i++){ // 循环注册脚本菜单
         menu_ALL[i][3] = GM_getValue(menu_ALL[i][0]);
         if (menu_ALL[i][0] === 'menu_blockLowCount') {
@@ -245,11 +246,13 @@ function defaultCollapsedAnswer() {
 // 一键收起回答+评论（全部）
 function collapsedAnswer() {
     if (!menu_value('menu_collapsedAnswer')) return
-    //console.log('1111', document.querySelector('.CornerAnimayedFlex'))
-    if (document.querySelector('.CornerAnimayedFlex') && !document.getElementById('collapsed-button')) {
-        // 向网页中插入收起全部回答按钮+样式+绑定点击事件
-        document.head.appendChild(document.createElement('style')).textContent = '.CornerButton{margin-bottom:8px !important;}.CornerButtons{bottom:45px !important;}';
-        document.querySelector('.CornerAnimayedFlex').insertAdjacentHTML('afterBegin', '<button id="collapsed-button" data-tooltip="收起全部回答/评论" data-tooltip-position="left" data-tooltip-will-hide-on-click="false" aria-label="收起全部回答/评论" type="button" class="' + document.querySelector('.CornerAnimayedFlex>button').className + '"><svg class="ContentItem-arrowIcon is-active" aria-label="收起全部回答/评论" fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M16.036 19.59a1 1 0 0 1-.997.995H9.032a.996.996 0 0 1-.997-.996v-7.005H5.03c-1.1 0-1.36-.633-.578-1.416L11.33 4.29a1.003 1.003 0 0 1 1.412 0l6.878 6.88c.782.78.523 1.415-.58 1.415h-3.004v7.005z"></path></svg></button>');
+    const cornerButtons = document.querySelector('.CornerButtons');
+    const flexTarget = document.querySelector('.CornerAnimayedFlex:not(.CornerAnimayedFlex--kanshanEntry)') || document.querySelector('.CornerAnimayedFlex') || cornerButtons;
+    if (flexTarget && !document.getElementById('collapsed-button')) {
+        const refBtn = document.querySelector('.CornerAnimayedFlex>button, .CornerButton');
+        const btnClass = refBtn ? refBtn.className : 'Button CornerButton Button--plain';
+        document.head.appendChild(document.createElement('style')).textContent = '.CornerButton{margin-bottom:8px !important;}.CornerButtons{bottom:25px !important;} .CornerAnimayedFlex:has(#collapsed-button){height:auto !important;opacity:1 !important;pointer-events:auto !important;visibility:visible !important;}';
+        flexTarget.insertAdjacentHTML('afterBegin', '<button id="collapsed-button" data-tooltip="收起全部回答/评论" data-tooltip-position="left" data-tooltip-will-hide-on-click="false" aria-label="收起全部回答/评论" type="button" class="' + btnClass + '"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" color="var(--MapText02A)" class="Zi Zi--ArrowUpward" fill="currentColor" style="-webkit-transform: rotate(180deg);transform: rotate(180deg);"><path d="M4.336 10.07a.875.875 0 0 1 .094-1.234l7-6 .003-.002a.87.87 0 0 1 .12-.085l.01-.007a.873.873 0 0 1 .131-.061l.012-.004a.874.874 0 0 1 .586 0l.011.004a.872.872 0 0 1 .262.153l.004.002 7 6a.875.875 0 0 1-1.139 1.328l-5.555-4.761V20.5a.875.875 0 0 1-1.75 0V5.403l-5.556 4.761a.875.875 0 0 1-1.233-.095Z"></path></svg></button>');
         document.getElementById('collapsed-button').onclick = function () {
 
             // 收起所有评论（悬浮的 [收起评论]）
@@ -270,7 +273,7 @@ function collapsedAnswer() {
                 // 被 getCollapsedAnswerObserver 函数收起过的，悬浮 [收起] 按钮（悬浮底部的横栏）
                 document.querySelectorAll('.RichContent:not([script-collapsed]) .ContentItem-actions.Sticky [data-zop-retract-question]').forEach(function(button) {
                     let el = button.parentElement;
-                    while (!el.classList.contains('RichContent')) {el = el.parentElement;}
+                    while (el && !el.classList.contains('RichContent')) {el = el.parentElement;}
                     if (el) el.setAttribute('script-collapsed', '');
                     button.click();
                 })
@@ -290,122 +293,90 @@ function collapsedAnswer() {
     }
 }
 
+// 执行收起当前可视回答与评论的核心动作
+function doCollapseCurrentAnswer() {
+    // 下面这段主要是 [收起回答]，顺便 [收起评论]（如果展开了的话）
+    let rightButton = document.querySelector('.ContentItem-actions.Sticky.RichContent-actions.is-fixed.is-bottom')
+    if (rightButton) { // 悬浮在底部的 [收起回答]（此时正在浏览回答内容 [中间区域]）
+        let commentCollapseButton = rightButton.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+        if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) commentCollapseButton.click();
+        rightButton = rightButton.querySelector('.ContentItem-rightButton[data-zop-retract-question]')
+        if (rightButton) rightButton.click();
+    } else { // 固定在回答底部的 [收起回答]（此时正在浏览回答内容 [尾部区域]）
+        let answerCollapseButton_ = false;
+        for (let el of document.querySelectorAll('.ContentItem-rightButton[data-zop-retract-question]')) {
+            if (isElementInViewport(el)) {
+                let commentCollapseButton = el.parentNode.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                    commentCollapseButton.click();
+                    if (!isElementInViewport(commentCollapseButton)) scrollTo(0,el.offsetTop+50)
+                }
+                el.click()
+                answerCollapseButton_ = true;
+                break
+            }
+        }
+        if (!answerCollapseButton_) {
+            for (let el of document.querySelectorAll('.List-item, .Card.AnswerCard, .Card.TopstoryItem')) {
+                if (isElementInViewport_(el)) {
+                    let commentCollapseButton = el.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                    if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                        commentCollapseButton.click();
+                        if (!isElementInViewport(commentCollapseButton)) scrollTo(0,el.offsetTop+50)
+                    }
+                    let answerCollapseButton__ = el.querySelector('.ContentItem-rightButton[data-zop-retract-question]');
+                    if (answerCollapseButton__) answerCollapseButton__.click()
+                    break
+                }
+            }
+        }
+    }
 
-// 收起当前回答、评论（监听点击事件，点击网页两侧空白处）
-function collapsedNowAnswer(selectors) {
-    backToTop(selectors) // 快捷回到顶部
-    if (!menu_value('menu_collapsedNowAnswer')) return
-    document.querySelector(selectors).onclick = function(event){
-        if (event.target == this) {
-            // 下面这段主要是 [收起回答]，顺便 [收起评论]（如果展开了的话）
-            let rightButton = document.querySelector('.ContentItem-actions.Sticky.RichContent-actions.is-fixed.is-bottom')
-            if (rightButton) { // 悬浮在底部的 [收起回答]（此时正在浏览回答内容 [中间区域]）
-                // 固定的 [收起评论]（先看看是否展开评论）
-                let commentCollapseButton = rightButton.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                //console.log('111')
-                if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) commentCollapseButton.click();
-                // 再去收起回答
-                rightButton = rightButton.querySelector('.ContentItem-rightButton[data-zop-retract-question]')
-                //console.log('222')
-                if (rightButton) rightButton.click();
-
-            } else { // 固定在回答底部的 [收起回答]（此时正在浏览回答内容 [尾部区域]）
-
-                // 悬浮的 [收起评论]（此时正在浏览评论内容 [中间区域]）
-                //if (getXpath('//button[text()="收起评论"]',document.querySelector('.Comments-container'))) {getXpath('//button[text()="收起评论"]',document.querySelector('.Comments-container')).click();console.log('asfaf')}
-
-                let answerCollapseButton_ = false;
-                for (let el of document.querySelectorAll('.ContentItem-rightButton[data-zop-retract-question]')) { // 遍历所有回答底部的 [收起] 按钮
-                    if (isElementInViewport(el)) { // 判断该 [收起] 按钮是否在可视区域内
-                        // 固定的 [收起评论]（先看看是否展开评论，即存在 [收起评论] 按钮）
-                        let commentCollapseButton = el.parentNode.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                        // 如果展开了评论，就收起评论
-                        //console.log('333')
-                        //if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) commentCollapseButton.click();
-                        if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
-                            commentCollapseButton.click();
-                            if (!isElementInViewport(commentCollapseButton)) scrollTo(0,el.offsetTop+50)
-                        }
-                        //console.log('444')
-                        el.click() // 再去收起回答
-                        answerCollapseButton_ = true; // 如果找到并点击收起了，就没必要执行下面的代码了（可视区域中没有 [收起回答] 时）
+    // 下面这段只针对 [收起评论]（如果展开了的话）
+    let commentCollapseButton_ = false, commentCollapseButton__ = false;
+    let commentCollapseButton = getXpath('//button[text()="收起评论"]',document.querySelector('.Comments-container'))
+    if (commentCollapseButton) {
+        commentCollapseButton.click();
+    } else {
+        let commentCollapseButton_1 = document.querySelectorAll('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type, .ContentItem-action > button.Button.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+        if (commentCollapseButton_1.length > 0) {
+            for (let el of commentCollapseButton_1) {
+                if (el.textContent.indexOf('收起评论') > -1) {
+                    if (isElementInViewport(el)) {
+                        el.click()
+                        commentCollapseButton_ = true
                         break
                     }
                 }
-                // 针对完全看不到 [收起回答] 按钮时（如 [头部区域]，以及部分明明很长却不显示悬浮横条的回答）
-                if (!answerCollapseButton_) {
-                    for (let el of document.querySelectorAll('.List-item, .Card.AnswerCard, .Card.TopstoryItem')) { // 遍历所有回答主体元素
-                        if (isElementInViewport_(el)) { // 判断该回答是否在可视区域内
-                            // 固定的 [收起评论]（先看看是否展开评论，即存在 [收起评论] 按钮）
-                            let commentCollapseButton = el.querySelector('button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                            // 如果展开了评论，就收起评论
-                            //console.log('555',commentCollapseButton)
-                            if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
-                                commentCollapseButton.click();
-                                if (!isElementInViewport(commentCollapseButton)) scrollTo(0,el.offsetTop+50)
-                            }
-                            let answerCollapseButton__ = el.querySelector('.ContentItem-rightButton[data-zop-retract-question]');
-                            //console.log('666')
-                            if (answerCollapseButton__) answerCollapseButton__.click() // 再去收起回答
+            }
+        }
+        if (commentCollapseButton_ == false) {
+            let commentCollapseButton_1 = document.querySelectorAll('.Comments-container')
+            if (commentCollapseButton_1.length > 0) {
+                for (let el of commentCollapseButton_1) {
+                    if (isElementInViewport(el)) {
+                        let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
+                            commentCollapseButton = parentElement && parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                        if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                            commentCollapseButton.click()
+                            if (!isElementInViewport(commentCollapseButton)) scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)
+                            commentCollapseButton__ = true
                             break
                         }
                     }
                 }
             }
-
-            // 下面这段只针对 [收起评论]（如果展开了的话）
-            let commentCollapseButton_ = false, commentCollapseButton__ = false;
-            // 悬浮的 [收起评论]（此时正在浏览评论内容 [中间区域]）
-            let commentCollapseButton = getXpath('//button[text()="收起评论"]',document.querySelector('.Comments-container'))
-            if (commentCollapseButton) {
-                //console.log('777', commentCollapseButton)
-                commentCollapseButton.click();
-            } else { // 固定的 [收起评论]（此时正在浏览评论内容 [头部区域]）
-                let commentCollapseButton_1 = document.querySelectorAll('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type, .ContentItem-action > button.Button.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                if (commentCollapseButton_1.length > 0) {
-                    for (let el of commentCollapseButton_1) {
-                        if (el.textContent.indexOf('收起评论') > -1) {
-                            if (isElementInViewport(el)) {
-                                //console.log('888')
-                                el.click()
-                                commentCollapseButton_ = true // 如果找到并点击了，就没必要执行下面的代码了（可视区域中没有 [收起评论] 时）
+            if (commentCollapseButton__ == false) {
+                let commentCollapseButton_2 = document.querySelectorAll('.Editable-content')
+                if (commentCollapseButton_2.length > 0) {
+                    for (let el of commentCollapseButton_2) {
+                        if (isElementInViewport(el)) {
+                            let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
+                                commentCollapseButton = parentElement && parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
+                            if (commentCollapseButton && commentCollapseButton.textContent.indexOf('收起评论') > -1) {
+                                commentCollapseButton.click()
+                                if (!isElementInViewport(commentCollapseButton)) scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)
                                 break
-                            }
-                        }
-                    }
-                }
-                if (commentCollapseButton_ == false) { // 可视区域中没有 [收起评论] 时（此时正在浏览评论内容 [头部区域] + [尾部区域](不上不下的，既看不到固定的 [收起评论] 又看不到悬浮的 [收起评论])），需要判断可视区域中是否存在评论元素
-                    let commentCollapseButton_1 = document.querySelectorAll('.Comments-container')
-                    if (commentCollapseButton_1.length > 0) {
-                        for (let el of commentCollapseButton_1) {
-                            if (isElementInViewport(el)) {
-                                let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
-                                    commentCollapseButton = parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                                if (commentCollapseButton.textContent.indexOf('收起评论') > -1) {
-                                    //console.log('999')
-                                    commentCollapseButton.click()
-                                    if (!isElementInViewport(commentCollapseButton)) {console.log(parentElement,parentElement.offsetTop,parentElement.offsetHeight);scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)}
-                                    commentCollapseButton__ = true // 如果找到并点击了，就没必要执行下面的代码了（可视区域中没有 评论元素 时）
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    if (commentCollapseButton__ == false) { // 如果上面的都没找到，那么就尝试寻找评论末尾的 [评论回复框]
-                        let commentCollapseButton_2 = document.querySelectorAll('.Editable-content')
-                        if (commentCollapseButton_2.length > 0) {
-                            for (let el of commentCollapseButton_2) {
-                                if (isElementInViewport(el)) {
-                                    let parentElement = findParentElement(el, 'List-item') || findParentElement(el, 'Card '),
-                                    commentCollapseButton = parentElement.querySelector('.ContentItem-actions > button.Button.ContentItem-action.Button--plain.Button--withIcon.Button--withLabel:first-of-type')
-                                    //console.log(commentCollapseButton)
-                                    if (commentCollapseButton.textContent.indexOf('收起评论') > -1) {
-                                        //console.log('101010')
-                                        commentCollapseButton.click()
-                                        if (!isElementInViewport(commentCollapseButton)) {console.log(parentElement,parentElement.offsetTop,parentElement.offsetHeight);scrollTo(0,parentElement.offsetTop+parentElement.offsetHeight-50)}
-                                        break
-                                    }
-                                }
                             }
                         }
                     }
@@ -415,11 +386,59 @@ function collapsedNowAnswer(selectors) {
     }
 }
 
+// 判断点击/右键是否落在网页两侧空白区（兼容新版 T-Shape 弹性侧边空白与经典布局）
+function isBlankGutterEvent(event) {
+    const target = event.target;
+    if (!target || target.nodeType !== 1) return false;
+    if (event.clientY <= 60) return false;
+    const interactiveOrContent = 'header, nav, aside nav, a, button, input, textarea, select, label, img, video, svg, [role="button"], [role="menuitem"], [role="dialog"], [contenteditable="true"], .Modal-wrapper, .Popover-content, .HoverCard, .Card, .List-item, .ContentItem, .QuestionAnswer-content, [data-zop-question], .TopstoryItem, .SearchResult-Card, .HotItem, .PinItem, .Post-Main, .Post-SideActions, .Comments-container, .CornerButtons, .zhihubackup-wrap, .zhcollect-minimal-btns, .zhihuE_SettingBackdrop_1, #zhihu-obsidian-modal';
+    if (typeof target.closest === 'function' && target.closest(interactiveOrContent)) return false;
+    const mainCol = document.querySelector('.Question-mainColumn, .Topstory-mainColumn, .SearchMain, .CollectionsDetailPage-mainColumn, .Profile-mainColumn, .Post-Main');
+    if (mainCol) {
+        const rect = mainCol.getBoundingClientRect();
+        if (rect.width > 0 && event.clientX >= rect.left && event.clientX <= rect.right) return false;
+    }
+    return true;
+}
+
+var _blankGutterBound = false;
+function ensureBlankGutterListeners() {
+    if (_blankGutterBound) return;
+    _blankGutterBound = true;
+    document.addEventListener('click', function(event) {
+        if (!menu_value('menu_collapsedNowAnswer') || event.defaultPrevented || event.button !== 0) return;
+        if (window.getSelection && String(window.getSelection()).trim()) return;
+        if (isBlankGutterEvent(event)) doCollapseCurrentAnswer();
+    });
+    document.addEventListener('contextmenu', function(event) {
+        if (!menu_value('menu_backToTop') || event.defaultPrevented) return;
+        if (isBlankGutterEvent(event)) {
+            event.preventDefault();
+            window.scrollTo(0, 0);
+        }
+    });
+}
+
+// 收起当前回答、评论（监听点击事件，点击网页两侧空白处）
+function collapsedNowAnswer(selectors) {
+    ensureBlankGutterListeners();
+    backToTop(selectors);
+    if (!menu_value('menu_collapsedNowAnswer')) return;
+    const el = selectors ? document.querySelector(selectors) : null;
+    if (!el) return;
+    el.onclick = function(event) {
+        if (event.target == this) doCollapseCurrentAnswer();
+    };
+}
+
 
 // 回到顶部（监听点击事件，鼠标右键点击网页两侧空白处）
 function backToTop(selectors) {
-    if (!menu_value('menu_backToTop')) return
-    document.querySelector(selectors).oncontextmenu = function(event){
+    ensureBlankGutterListeners();
+    if (!menu_value('menu_backToTop')) return;
+    const el = selectors ? document.querySelector(selectors) : null;
+    if (!el) return;
+    el.oncontextmenu = function(event){
         if (event.target == this) {
             event.preventDefault();
             window.scrollTo(0,0)
@@ -1330,8 +1349,20 @@ function addToQuestion() {
 // 展开问题描述
 function questionRichTextMore() {
     if (!menu_value('menu_questionRichTextMore')) return
-    let button = document.querySelector('button.QuestionRichText-more');
+    let button = document.querySelector('button.QuestionRichText-more') ||
+        Array.from(document.querySelectorAll('[data-zop-question] button, .QuestionRichText--collapsed')).find(el => (el.textContent || '').indexOf('显示全部') > -1);
     if (button) button.click()
+}
+
+// 绑定静态跳转登录而不替换 React 节点（替换 outerHTML 会导致 React removeChild 崩溃）
+function bindSigninRedirect(btn) {
+    if (!btn || btn.dataset.xiuSigninBound) return;
+    btn.dataset.xiuSigninBound = '1';
+    btn.addEventListener('click', function(e) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        window.open('https://www.zhihu.com/signin', '_blank');
+    }, true);
 }
 
 // 移除登录弹窗
@@ -1355,14 +1386,14 @@ function removeLogin() {
         if (!document.querySelector('.ColumnPageHeader-profile>.AppHeader-menu')) { // 未登录
             const observer = new MutationObserver(removeLoginModal);
             observer.observe(document, { childList: true, subtree: true });
-            if (getXpath('//button[text()="登录/注册"]')) getXpath('//button[text()="登录/注册"]').outerHTML = '<a class="Button AppHeader-login Button--blue" href="https://www.zhihu.com/signin" target="_blank">登录/注册</a>'; // [登录] 按钮跳转至登录页面
+            bindSigninRedirect(getXpath('//button[text()="登录/注册"]'));
         }
     } else { // 不是文章页
-        if (!document.querySelector('.AppHeader-profile>.AppHeader-menu')) { // 未登录
+        if (!document.querySelector('.AppHeader-profile>.AppHeader-menu') && !document.querySelector('header.AppHeader [href*="/people/"], header.AppHeader img.Avatar')) { // 未登录
             const observer = new MutationObserver(removeLoginModal);
             observer.observe(document, { childList: true, subtree: true });
             document.lastElementChild.appendChild(document.createElement('style')).textContent = '.Question-mainColumnLogin, button.AppHeader-login {display: none !important;}'; // 屏蔽问题页中间的登录提示
-            if (getXpath('//button[text()="登录/注册"]')) getXpath('//button[text()="登录/注册"]').outerHTML = '<a class="Button AppHeader-login Button--blue" href="https://www.zhihu.com/signin" target="_blank">登录/注册</a>'; // [登录] 按钮跳转至登录页面
+            bindSigninRedirect(getXpath('//button[text()="登录/注册"]'));
         }
     }
 }
@@ -1373,6 +1404,7 @@ function cleanTitles() {
 
     // 方案一
     const elTitle = document.head.querySelector('title');
+    if (!elTitle) return;
     const original = elTitle.textContent;
     const observer = new MutationObserver(function() {
         if (elTitle.textContent != original) { // 避免重复执行
@@ -1380,24 +1412,6 @@ function cleanTitles() {
         }
     });
     observer.observe(elTitle, { childList: true });
-
-    // 方案二
-    // if (Reflect.getOwnPropertyDescriptor(document, 'title')) {
-    //     const elTitle = document.head.querySelector('title');
-    //     const original = elTitle.textContent;
-    //     const observer = new MutationObserver(function() {
-    //         if (elTitle.textContent != original) { // 避免重复执行
-    //             elTitle.textContent = original;
-    //         }
-    //     });
-    //     observer.observe(elTitle, { childList: true });
-    // } else {
-    //     const title = document.title;
-    //     Reflect.defineProperty(document, 'title', {
-    //         set: () => {},
-    //         get: () => title,
-    //     });
-    // }
 }
 
 
@@ -1405,12 +1419,14 @@ function cleanTitles() {
 function cleanSearch() {
     if (!menu_value('menu_cleanSearch')) return
 
-    const el = document.querySelector('.SearchBar-input > input');
-    const observer = new MutationObserver((mutationsList, observer) => {
-        if (mutationsList[0].attributeName === 'placeholder' && mutationsList[0].target.placeholder != '') mutationsList[0].target.placeholder = '';
-    });
-    el.placeholder = '';
-    observer.observe(el, { attributes: true });
+    const el = document.querySelector('.SearchBar-input > input, header.AppHeader form[action="/search"] input[name="q"]');
+    if (el) {
+        const observer = new MutationObserver((mutationsList) => {
+            if (mutationsList[0].attributeName === 'placeholder' && mutationsList[0].target.placeholder != '') mutationsList[0].target.placeholder = '';
+        });
+        el.placeholder = '';
+        observer.observe(el, { attributes: true });
+    }
     document.documentElement.appendChild(document.createElement('style')).textContent = '.AutoComplete-group > .SearchBar-label:not(.SearchBar-label--history), .AutoComplete-group > [id^="AutoComplete2-topSearch-"], .AutoComplete-group > [id^="AutoComplete3-topSearch-"] {display: none !important;}';
 }
 
@@ -1478,12 +1494,26 @@ function getXpath(xpath, contextNode, doc = document) {
 
 // 显示问题作者
 function question_author() {
-    if (document.querySelector('.BrandQuestionSymbol, .QuestionAuthor, .SpecialQuestionAuthor')) return
-    let qJson = JSON.parse(document.querySelector('#js-initialData').textContent).initialState.entities.questions[/\d+/.exec(location.pathname)[0]].author,
-        html = `<div class="BrandQuestionSymbol"><a class="BrandQuestionSymbol-brandLink" href="/people/${qJson.urlToken}"><img role="presentation" src="${qJson.avatarUrl}" class="BrandQuestionSymbol-logo" alt=""><span class="BrandQuestionSymbol-name">${qJson.name}</span></a><div class="BrandQuestionSymbol-divider" style="margin-left: 5px;margin-right: 10px;"></div></div>`;
-        //html = `<div class="QuestionAuthor"><div class="AuthorInfo AuthorInfo--plain" itemprop="author" itemscope="" itemtype="http://schema.org/Person"><div class="AuthorInfo"><span class="UserLink AuthorInfo-avatarWrapper"><div class="Popover"><div id="Popover18-toggle" aria-haspopup="true" aria-expanded="false" aria-owns="Popover18-content"><a class="UserLink-link" data-za-detail-view-element_name="User" target="_blank" href="${qJson.urlToken}"><img class="Avatar AuthorInfo-avatar" width="24" height="24" src="${qJson.avatarUrl}"></a></div></div></span><div class="AuthorInfo-content"><div class="AuthorInfo-head"><span class="UserLink AuthorInfo-name"><div class="Popover"><div id="Popover19-toggle" aria-haspopup="true" aria-expanded="false" aria-owns="Popover19-content"><a class="UserLink-link" data-za-detail-view-element_name="User" target="_blank" href="${qJson.urlToken}">${qJson.name}</a></div></div></span></div></div></div></div></div>`
-    document.querySelector('.QuestionHeader-topics').insertAdjacentHTML('beforebegin', html);
-    //document.querySelector('.QuestionPage h1.QuestionHeader-title').insertAdjacentHTML('afterend', html);
+    if (document.querySelector('.BrandQuestionSymbol, .QuestionAuthor, .SpecialQuestionAuthor, .QuestionHeader-specialQuestionAuthor')) return;
+    try {
+        const initEl = document.querySelector('#js-initialData');
+        const qidMatch = /\d+/.exec(location.pathname);
+        if (!initEl || !qidMatch) return;
+        const qJson = JSON.parse(initEl.textContent || '{}')?.initialState?.entities?.questions?.[qidMatch[0]]?.author;
+        if (!qJson || !qJson.name) return;
+        const profileHref = qJson.urlToken ? `/people/${qJson.urlToken}` : 'javascript:void(0)';
+        const html = `<div class="BrandQuestionSymbol" style="display:inline-flex;align-items:center;"><a class="BrandQuestionSymbol-brandLink" href="${profileHref}" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:inherit;"><img role="presentation" src="${qJson.avatarUrl || ''}" class="BrandQuestionSymbol-logo" alt="" style="width:20px;height:20px;border-radius:50%;"><span class="BrandQuestionSymbol-name">${qJson.name}</span></a><div class="BrandQuestionSymbol-divider" style="margin-left: 8px;margin-right: 10px;height:14px;border-left:1px solid rgba(133,144,166,.35);"></div></div>`;
+        const classicTopics = document.querySelector('.QuestionHeader-topics');
+        if (classicTopics) {
+            classicTopics.insertAdjacentHTML('beforebegin', html);
+            return;
+        }
+        const tshapeTopicLink = document.querySelector('.QuestionPage [data-zop-question] a[href*="/topic/"]');
+        const tshapeTopicChip = tshapeTopicLink ? (tshapeTopicLink.closest('[data-za-detail-view-path-module="TopicItem"]') || tshapeTopicLink.parentElement) : null;
+        if (tshapeTopicChip) {
+            tshapeTopicChip.insertAdjacentHTML('beforebegin', html);
+        }
+    } catch (e) {}
 }
 
 
@@ -1549,9 +1579,30 @@ function topTime_publishTop(t, _this, _class) {
 
 // 问题创建时间
 function question_time() {
-    if (!(document.querySelector('.QuestionPage .QuestionHeader-side .QuestionTime-xiu'))) {
-        document.querySelector('.QuestionPage .QuestionHeader-side').insertAdjacentHTML('beforeEnd', '<div class="QuestionTime-xiu" style="color: #9098ac; margin-top: 5px; font-size: 13px; font-style: italic;"><p>创建时间：' + getUTC8(new Date(document.querySelector('.QuestionPage > meta[itemprop=dateCreated]').content)) + '</p><p>最后编辑：' + getUTC8(new Date(document.querySelector('.QuestionPage > meta[itemprop=dateModified]').content)) + '</p></div>');
-    }
+    if (document.querySelector('.QuestionTime-xiu')) return;
+    try {
+        let createdRaw = document.querySelector('.QuestionPage > meta[itemprop=dateCreated], .QuestionPage meta[itemprop=dateCreated]')?.content;
+        let modifiedRaw = document.querySelector('.QuestionPage > meta[itemprop=dateModified], .QuestionPage meta[itemprop=dateModified]')?.content;
+        if (!createdRaw || !modifiedRaw) {
+            const initEl = document.querySelector('#js-initialData');
+            const qidMatch = /\d+/.exec(location.pathname);
+            const qObj = initEl && qidMatch ? JSON.parse(initEl.textContent || '{}')?.initialState?.entities?.questions?.[qidMatch[0]] : null;
+            if (qObj?.created) createdRaw = qObj.created * 1000;
+            if (qObj?.updatedTime) modifiedRaw = qObj.updatedTime * 1000;
+        }
+        if (!createdRaw) return;
+        const createdStr = getUTC8(new Date(createdRaw));
+        const modifiedStr = modifiedRaw ? getUTC8(new Date(modifiedRaw)) : createdStr;
+        const side = document.querySelector('.QuestionPage .QuestionHeader-side');
+        if (side) {
+            side.insertAdjacentHTML('beforeEnd', '<div class="QuestionTime-xiu" style="color: #9098ac; margin-top: 5px; font-size: 13px; font-style: italic;"><p>创建时间：' + createdStr + '</p><p>最后编辑：' + modifiedStr + '</p></div>');
+            return;
+        }
+        const tshapeTitle = document.querySelector('.QuestionPage [data-zop-question] > h1');
+        if (tshapeTitle) {
+            tshapeTitle.insertAdjacentHTML('afterend', '<div class="QuestionTime-xiu" style="color: var(--MapText04A, #8590a6); margin-top: 6px; font-size: 12.5px; display: flex; gap: 16px; flex-wrap: wrap;"><span>创建时间：' + createdStr + '</span><span>最后编辑：' + modifiedStr + '</span></div>');
+        }
+    } catch (e) {}
 }
 
 
@@ -1627,7 +1678,7 @@ function blockHotOther() {
     const blockLive_content = (mutationsList, observer) => {
         for (const mutation of mutationsList) {
             for (const target of mutation.addedNodes) {
-                if (target.classList.contains('.HotItem')) {
+                if (target.nodeType === 1 && target.classList && target.classList.contains('HotItem')) {
                     block();
                 }
             }
@@ -1641,14 +1692,29 @@ function blockHotOther() {
     block();
 }
 
-// 将关注/推荐/热榜/专栏的选项去掉默认的点击事件改成静态链接（针对首页互相切换（知乎这里切换是动态加载的），为了避免功能交叉混乱
-// 针对所有页面
-function switchHome() {
-    document.querySelectorAll('header.AppHeader nav').forEach((a)=>{a.outerHTML = a.outerHTML;})
+// 将关注/推荐/热榜/专栏的选项改成整页跳转，避免单页切换导致功能交叉混乱（使用捕获阶段拦截而非 outerHTML 克隆，防止破坏 React 虚拟 DOM 节点引发 removeChild 崩溃）
+function bindStaticNavLinks(rootSelector) {
+    document.querySelectorAll(rootSelector).forEach((a) => {
+        if (a.dataset.xiuStaticNav) return;
+        a.dataset.xiuStaticNav = '1';
+        a.addEventListener('click', function(e) {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const href = a.getAttribute('href');
+            if (!href || href === '#' || href.startsWith('javascript:') || a.getAttribute('target') === '_blank') return;
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            if (href === '/' || a.href === 'https://www.zhihu.com/') {
+                document.cookie = 'tst=r; expires=Thu, 18 Dec 2099 12:00:00 GMT; domain=.zhihu.com; path=/';
+            }
+            location.href = a.href;
+        }, true);
+    });
 }
-// 针对首页几个页面
+function switchHome() {
+    bindStaticNavLinks('header.AppHeader nav a, aside nav a');
+}
 function switchHomeRecommend() {
-    document.querySelectorAll('header.AppHeader nav>a:not([target])[href="https://www.zhihu.com/"]').forEach((a)=>{a.addEventListener('click', function(e){e.preventDefault();document.cookie='tst=r; expires=Thu, 18 Dec 2099 12:00:00 GMT; domain=.zhihu.com; path=/';location.href=this.href;return false;})})
+    bindStaticNavLinks('header.AppHeader nav a:not([target])[href="https://www.zhihu.com/"], aside nav a:not([target])[href="https://www.zhihu.com/"]');
 }
 
 (function() {
@@ -1686,8 +1752,8 @@ function switchHomeRecommend() {
                 questionRichTextMore(); //                                     展开问题描述
                 if (location.pathname.indexOf('answer') == -1) { //  问题页而不是回答页
                     blockLowCount('question'); //                              屏蔽低赞/低评回答/文章
-                } else { // 将回答页的的查看全部回答选项去掉默认的点击事件改成静态链接，为了避免功能交叉混乱
-                    document.querySelectorAll('div.Card.ViewAll>a').forEach((a)=>{a.outerHTML = a.outerHTML;})
+                } else { // 将回答页的查看全部回答改为整页跳转，不替换 React 节点
+                    bindStaticNavLinks('div.Card.ViewAll>a, .ViewAll>a');
                 }
                 blockUsers('question'); //                                     屏蔽指定用户
                 blockYanXuan(); //                                             屏蔽盐选内容
