@@ -3,7 +3,7 @@
 // @name:zh-CN   知乎增强
 // @name:zh-TW   知乎增強
 // @name:ru      Улучшение Zhihu
-// @version      2.4.0
+// @version      2.5.0
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Enhanced.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Enhanced.user.js
 // @author       X.I.U
@@ -34,7 +34,7 @@
 
 'use strict';
 var menu_ALL = [
-    ['menu_defaultCollapsedAnswer', '默认收起回答', '默认收起回答', true],
+    ['menu_defaultCollapsedAnswer', '默认收起回答', '默认收起回答', false],
     ['menu_collapsedAnswer', '一键收起回答/评论', '一键收起回答/评论', true],
     ['menu_collapsedNowAnswer', '快捷收起回答/评论 (点击两侧空白处)', '快捷收起回答/评论', true],
     ['menu_backToTop', '快捷回到顶部 (右键两侧空白处)', '快捷回到顶部', true],
@@ -59,11 +59,12 @@ var menu_ALL = [
     ['menu_blockTypeFollowQuestion', '关注了XX [关注页]', '关注了XX（关注页）', false],
     ['menu_blockTypeTopic', '话题 [搜索页]', '话题（搜索页）', false],
     ['menu_blockTypeSearch', '杂志文章、盐选专栏、相关搜索等 [搜索页]', '相关搜索、杂志、盐选等（搜索页）', false],
-    ['menu_blockYanXuan', '盐选内容 [问题页]', '盐选内容（问题页）', false],
+    ['menu_blockYanXuan', '盐选内容 [问题页]', '盐选内容（问题页）', true],
     ['menu_blockTypeLiveHot', '热榜文章、直播、广告等 [热榜]', '热榜文章、直播、广告等 [热榜]', true],
     ['menu_cleanHighlightLink', '移除高亮链接 (高亮的文字链接)', '移除高亮链接', true],
-    ['menu_cleanSearch', '净化搜索热门 (默认搜索词及热门搜索)', '净化搜索热门', false],
-    ['menu_cleanTitles', '净化标题消息 (标题中的私信/消息)', '净化标题提醒', false],
+    ['menu_cleanSearch', '净化搜索热门 (默认搜索词及热门搜索)', '净化搜索热门', true],
+    ['menu_cleanTitles', '净化标题消息 (标题中的私信/消息)', '净化标题提醒', true],
+    ['menu_hideRedDot', '隐藏消息/私信红点与通知气泡', '隐藏消息/私信红点与通知气泡', true],
     ['menu_questionRichTextMore', '展开问题描述', '展开问题描述', false],
     ['menu_publishTop', '置顶显示时间', '置顶显示时间', true],
     ['menu_typeTips', '区分问题文章', '区分问题文章', true],
@@ -71,6 +72,15 @@ var menu_ALL = [
 ], menu_ID = [];
 for (let i=0;i<menu_ALL.length;i++){ // 如果读取到的值为 null 就写入默认值
     if (GM_getValue(menu_ALL[i][0]) == null){GM_setValue(menu_ALL[i][0], menu_ALL[i][3])};
+}
+// 一次性精简默认项：开启去广告/去盐选/去热搜占位词/去标题消息/去消息私信红点，关闭自动收起回答干扰
+if (!GM_getValue('zh_streamlined_v250')) {
+    GM_setValue('menu_defaultCollapsedAnswer', false);
+    GM_setValue('menu_blockYanXuan', true);
+    GM_setValue('menu_cleanSearch', true);
+    GM_setValue('menu_cleanTitles', true);
+    GM_setValue('menu_hideRedDot', true);
+    GM_setValue('zh_streamlined_v250', true);
 }
 registerMenuCommand();
 
@@ -1389,7 +1399,7 @@ function removeLogin() {
             bindSigninRedirect(getXpath('//button[text()="登录/注册"]'));
         }
     } else { // 不是文章页
-        if (!document.querySelector('.AppHeader-profile>.AppHeader-menu') && !document.querySelector('header.AppHeader [href*="/people/"], header.AppHeader img.Avatar')) { // 未登录
+        if (!document.querySelector('.AppHeader-profile>.AppHeader-menu') && !document.querySelector('header:is(.LeanAppHeaderBar, .AppHeader) [href*="/people/"], header:is(.LeanAppHeaderBar, .AppHeader) img.Avatar, header.LeanAppHeaderBar img')) { // 未登录
             const observer = new MutationObserver(removeLoginModal);
             observer.observe(document, { childList: true, subtree: true });
             document.lastElementChild.appendChild(document.createElement('style')).textContent = '.Question-mainColumnLogin, button.AppHeader-login {display: none !important;}'; // 屏蔽问题页中间的登录提示
@@ -1398,20 +1408,64 @@ function removeLogin() {
     }
 }
 
-// 净化标题消息
-function cleanTitles() {
-    if (!menu_value('menu_cleanTitles')) return
+// 注入广告卡片、营销弹窗与消息/私信红点屏蔽样式
+function injectCleanStyles() {
+    let css = `
+.TopstoryItem--advertCard,
+.Pc-card.Card,
+.Pc-Business-Card-PcTopFeedBanner,
+.Pc-word-card,
+.RichText-ADLinkCardContainer,
+.ADLinkCardContainer,
+.MCNLinkCard,
+.AnswerItem-extraInfo .AdblockBanner,
+[data-za-detail-view-path-module="AdItem"],
+.Question-sideColumnAdContainer,
+.Question-mainColumnLogin,
+.AppBanner,
+.PushNotifications-Modal {display: none !important;}
+`;
+    if (menu_value('menu_hideRedDot')) {
+        css += `
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) :is(button, a) > div:first-child > svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) [href*="/notifications"] svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) [href*="/messages"] svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) .app-header-badge,
+aside nav .app-header-badge,
+aside nav :is(a, button) svg + div,
+.AppHeader-notifications:not([aria-label="通知"]) > div:first-of-type,
+.AppHeader-messages:not([aria-label="私信"]) > div:first-of-type,
+.PushNotifications-count,
+.Messages-count,
+.AppHeader-unreadCount,
+.Messages-newItemIcon,
+.PushNotifications-redDot,
+.Chat-UnreadCount,
+.KanshanCornerButton span[aria-hidden="true"] {display: none !important;}
+`;
+    }
+    const root = document.documentElement || document.head;
+    if (root) {
+        const s = document.createElement('style');
+        s.textContent = css;
+        root.appendChild(s);
+    }
+}
 
-    // 方案一
-    const elTitle = document.head.querySelector('title');
-    if (!elTitle) return;
-    const original = elTitle.textContent;
-    const observer = new MutationObserver(function() {
-        if (elTitle.textContent != original) { // 避免重复执行
-            elTitle.textContent = original;
+// 净化标题消息（只剥离未读消息/私信前缀，不锁定单页应用跳转后的正常页面标题）
+function cleanTitles() {
+    if (!menu_value('menu_cleanTitles') && !menu_value('menu_hideRedDot')) return;
+    const prefixRe = /^\s*[（(][^()（）]*条(?:消息|私信)[^()（）]*[)）]\s*/;
+    const strip = () => {
+        if (typeof document.title === 'string' && prefixRe.test(document.title)) {
+            document.title = document.title.replace(prefixRe, '');
         }
-    });
-    observer.observe(elTitle, { childList: true });
+    };
+    const elTitle = document.head && document.head.querySelector('title');
+    strip();
+    if (!elTitle) return;
+    const observer = new MutationObserver(strip);
+    observer.observe(elTitle, { childList: true, characterData: true, subtree: true });
 }
 
 
@@ -1419,7 +1473,7 @@ function cleanTitles() {
 function cleanSearch() {
     if (!menu_value('menu_cleanSearch')) return
 
-    const el = document.querySelector('.SearchBar-input > input, header.AppHeader form[action="/search"] input[name="q"]');
+    const el = document.querySelector('.SearchBar-input > input, header:is(.LeanAppHeaderBar, .AppHeader) form[action="/search"] input[name="q"], header.LeanAppHeaderBar input');
     if (el) {
         const observer = new MutationObserver((mutationsList) => {
             if (mutationsList[0].attributeName === 'placeholder' && mutationsList[0].target.placeholder != '') mutationsList[0].target.placeholder = '';
@@ -1711,16 +1765,17 @@ function bindStaticNavLinks(rootSelector) {
     });
 }
 function switchHome() {
-    bindStaticNavLinks('header.AppHeader nav a, aside nav a');
+    bindStaticNavLinks('header.AppHeader nav a, header.LeanAppHeaderBar a[href*="/follow"], header.LeanAppHeaderBar a[href*="/hot"], header.LeanAppHeaderBar a[href="https://www.zhihu.com/"], aside nav a');
 }
 function switchHomeRecommend() {
-    bindStaticNavLinks('header.AppHeader nav a:not([target])[href="https://www.zhihu.com/"], aside nav a:not([target])[href="https://www.zhihu.com/"]');
+    bindStaticNavLinks('header.AppHeader nav a:not([target])[href="https://www.zhihu.com/"], header.LeanAppHeaderBar a:not([target])[href="https://www.zhihu.com/"], aside nav a:not([target])[href="https://www.zhihu.com/"]');
 }
 
 (function() {
     if (window.onurlchange === undefined) {addUrlChangeEvent();} // Tampermonkey v4.11 版本添加的 onurlchange 事件 grant，可以监控 pjax 等网页的 URL 变化
     rememberSelectedBlockKeyword(); // 记录当前选中的文字，供右键脚本菜单直接加入屏蔽词
 
+    injectCleanStyles(); // 注入广告/弹窗/红点屏蔽样式
     removeLogin(); // 移除登录弹窗，Violentmonkey 不能延迟执行这个
     cleanTitles(); // 净化标题消息，不能延迟执行
     // Violentmonkey 比 Tampermonkey 加载更早，会导致一些元素还没加载，因此需要延迟一会儿

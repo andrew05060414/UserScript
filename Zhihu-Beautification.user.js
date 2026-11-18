@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         知乎美化（Andrew 自用）
-// @version      1.6.0
+// @version      1.7.0
 // @downloadURL  https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @updateURL    https://raw.githubusercontent.com/andrew05060414/UserScript/andrew-main/Zhihu-Beautification.user.js
 // @author       X.I.U
-// @description  宽屏显示、暗黑模式（4种）、暗黑模式跟随浏览器、屏蔽首页活动广告、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
+// @description  宽屏显示、官方原生暗黑模式（跟随系统）及自定义暗黑、隐藏消息/私信红点、屏蔽广告与弹窗、隐藏文章开头大图、调整图片最大高度、向下翻时自动隐藏顶栏
 // @match        *://www.zhihu.com/*
 // @match        *://zhuanlan.zhihu.com/*
 // @exclude      https://www.zhihu.com/signin*
@@ -36,8 +36,9 @@
         ['menu_widescreenDisplayPeople', '用户主页', '用户主页', false],
         ['menu_widescreenDisplayWidth', '宽屏宽度', '宽屏宽度 (默认 1000)', '1000'],
         ['menu_darkMode', '暗黑模式', '暗黑模式', true],
-        ['menu_darkModeType', '暗黑模式切换（1~4）', '暗黑模式切换', 1],
-        ['menu_darkModeAuto', '暗黑模式跟随浏览器', '暗黑模式跟随浏览器', false],
+        ['menu_darkModeType', '暗黑配色（0=官方原生 | 1~4=自定义）', '暗黑模式切换', 0],
+        ['menu_darkModeAuto', '暗黑模式跟随系统', '暗黑模式跟随系统', true],
+        ['menu_hideRedDot', '隐藏消息/私信红点', '隐藏消息/私信红点', true],
         ['menu_imageEnhancement', '图片增强', '设置图片最大高度与正文图片查看器功能', ''],
         ['menu_picHeight', '调整图片最大高度', '限制正文图片最大高度', true],
         ['menu_imageViewer', '正文图片查看器', '点击正文静态图片后打开查看器', false],
@@ -54,8 +55,17 @@
     for (let i=0;i<menu_ALL.length;i++){ // 如果读取到的值为 null 就写入默认值
         if (GM_getValue(menu_ALL[i][0]) == null){GM_setValue(menu_ALL[i][0], menu_ALL[i][3])};
     }
+    // 一次性迁移到知乎官方原生暗黑模式 + 跟随 Windows/浏览器系统 + 默认隐藏消息/私信红点
+    if (!GM_getValue('zh_migrated_official_dark_v170')) {
+        GM_setValue('menu_darkMode', true);
+        GM_setValue('menu_darkModeType', 0);
+        GM_setValue('menu_darkModeAuto', true);
+        GM_setValue('menu_hideRedDot', true);
+        GM_setValue('zh_migrated_official_dark_v170', true);
+    }
     registerMenuCommand();
     addStyle();
+    if (menu_value('menu_hideRedDot')) initCleanUnreadTitle();
     // 向下翻时自动隐藏顶栏
     if (menu_value('menu_hideTitle')) setTimeout(hideTitle, 2000);
     if (menu_value('menu_imageViewer')) initImageViewer();
@@ -71,8 +81,8 @@
         for (let i=0;i<menu_ALL.length;i++){ // 循环注册脚本菜单
             menu_ALL[i][3] = GM_getValue(menu_ALL[i][0]);
             if (menu_ALL[i][0] === 'menu_darkModeType') {
-                if (menu_ALL[i][3] > 4){ // 避免在减少 raw 数组后，用户储存的数据大于数组而报错
-                    menu_ALL[i][3] = 1;
+                if (menu_ALL[i][3] > 4 || menu_ALL[i][3] < 0 || menu_ALL[i][3] == null){ // 0=知乎官方原生，1~4=脚本自定义/滤镜
+                    menu_ALL[i][3] = 0;
                     GM_setValue('menu_darkModeType', menu_ALL[i][3]);
                 }
                 menu_ID[i] = GM_registerMenuCommand(`${menu_num(menu_ALL[i][3])} ${menu_ALL[i][1]}`, function(){menu_toggle(`${menu_ALL[i][3]}`,`${menu_ALL[i][0]}`)});
@@ -87,23 +97,25 @@
         menu_ID[menu_ID.length] = GM_registerMenuCommand('💬 反馈 & 建议', function () {window.GM_openInTab('https://github.com/XIU2/UserScript#xiu2userscript', {active: true,insert: true,setParent: true});window.GM_openInTab('https://greasyfork.org/zh-CN/scripts/412212/feedback', {active: true,insert: true,setParent: true});});
     }
 
-    // 切换暗黑模式
+    // 切换暗黑模式（0=官方原生 -> 1 -> 2 -> 3 -> 4 -> 0）
     function menu_toggle(menu_status, Name) {
-        menu_status = parseInt(menu_status)
-        if (menu_status >= 4){
-            menu_status = 1;
+        menu_status = parseInt(menu_status, 10);
+        if (isNaN(menu_status) || menu_status >= 4 || menu_status < 0) {
+            menu_status = 0;
         } else {
             menu_status += 1;
         }
         GM_setValue(`${Name}`, menu_status);
-        if (menu_status === 1) { // 设置 Cookie
-            if (getTheme() === 'light') setTheme('dark');
-        } else {
-            if (getTheme() === 'dark') {
-                setTheme('light');
+        const autoFollow = Boolean(GM_getValue('menu_darkModeAuto'));
+        const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (menu_status === 0 || menu_status === 1) {
+            if (autoFollow) {
+                setTheme(sysDark ? 'dark' : 'light', 'system', true);
             } else {
-                if (menu_value('menu_darkMode')) {location.reload();} else {registerMenuCommand();}
+                setTheme('dark', 'manual', true);
             }
+        } else {
+            setTheme('light', 'manual', true);
         }
     };
 
@@ -114,11 +126,19 @@
 
     // 菜单开关
     function menu_switch(menu_status, Name, Tips) {
+        const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (menu_status == 'true'){
             GM_setValue(`${Name}`, false);
 
-            if (Name === 'menu_darkMode') { // 暗黑模式
-                if (getTheme() === 'dark') {setTheme('light');} else {location.reload();}
+            if (Name === 'menu_darkMode') { // 关闭暗黑模式时恢复浅色手动模式
+                setTheme('light', 'manual', true);
+            } else if (Name === 'menu_darkModeAuto') {
+                const darkType = Number(GM_getValue('menu_darkModeType') ?? 0);
+                if (GM_getValue('menu_darkMode') && (darkType === 0 || darkType === 1)) {
+                    setTheme('dark', 'manual', true);
+                } else {
+                    location.reload();
+                }
             } else {
                 GM_notification({text: `已关闭 [${Tips}] 功能\n（点击刷新网页后生效）`, timeout: 3500, onclick: function(){location.reload();}});
             }
@@ -126,10 +146,19 @@
             GM_setValue(`${Name}`, true);
 
             if (Name === 'menu_darkMode') {
-                if (menu_value('menu_darkModeType') === 1) {
-                    if (getTheme() === 'light') setTheme('dark');
+                const darkType = Number(GM_getValue('menu_darkModeType') ?? 0);
+                const autoFollow = Boolean(GM_getValue('menu_darkModeAuto'));
+                if (darkType === 0 || darkType === 1) {
+                    setTheme(autoFollow ? (sysDark ? 'dark' : 'light') : 'dark', autoFollow ? 'system' : 'manual', true);
                 } else {
-                    if (getTheme() === 'dark') {setTheme('light');} else {location.reload();}
+                    setTheme('light', 'manual', true);
+                }
+            } else if (Name === 'menu_darkModeAuto') {
+                const darkType = Number(GM_getValue('menu_darkModeType') ?? 0);
+                if (GM_getValue('menu_darkMode') && (darkType === 0 || darkType === 1)) {
+                    setTheme(sysDark ? 'dark' : 'light', 'system', true);
+                } else {
+                    location.reload();
                 }
             } else {
                 GM_notification({text: `已开启 [${Tips}] 功能\n（点击刷新网页后生效）`, timeout: 3500, onclick: function(){location.reload();}});
@@ -201,14 +230,39 @@
     // 添加样式
     function addStyle() {
         const wsWidth = Number(GM_getValue('menu_widescreenDisplayWidth')) || 1000;
-        let style = `/* 屏蔽登录提示（问题页中间的元素） */
-.Question-mainColumnLogin {display: none !important;}
-/* 屏蔽回答页/首页广告 */
-.Pc-card.Card, .Pc-Business-Card-PcTopFeedBanner {display: none !important;}
+        let style = `/* 屏蔽登录提示与常见推广横幅/卡片广告 */
+.Question-mainColumnLogin,
+.Pc-card.Card,
+.Pc-Business-Card-PcTopFeedBanner,
+.Pc-word-card,
+.RichText-ADLinkCardContainer,
+.ADLinkCardContainer,
+.MCNLinkCard,
+.AnswerItem-extraInfo .AdblockBanner,
+[data-za-detail-view-path-module="AdItem"],
+.Question-sideColumnAdContainer,
+.AppBanner {display: none !important;}
 /* 屏蔽文章页推荐文章 */
 .Recommendations-Main {display: none !important;}
 /* 解除盐选内容选中复制限制 */
 div[class*="ManuscriptIntro-root-"] {user-select: auto !important;}
+`,
+            style_hideRedDot = `/* 隐藏顶栏与侧栏的消息/私信数字红点及右下角看山角标 */
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) :is(button, a) > div:first-child > svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) [href*="/notifications"] svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) [href*="/messages"] svg + div,
+header:is(.LeanAppHeaderBar, .AppHeader, .ColumnPageHeader) .app-header-badge,
+aside nav .app-header-badge,
+aside nav :is(a, button) svg + div,
+.AppHeader-notifications:not([aria-label="通知"]) > div:first-of-type,
+.AppHeader-messages:not([aria-label="私信"]) > div:first-of-type,
+.PushNotifications-count,
+.Messages-count,
+.AppHeader-unreadCount,
+.Messages-newItemIcon,
+.PushNotifications-redDot,
+.Chat-UnreadCount,
+.KanshanCornerButton span[aria-hidden="true"] {display: none !important;}
 `,
             style_index = `/* 屏蔽首页广告 */
 .TopstoryItem--advertCard {display: none !important;}
@@ -525,8 +579,7 @@ html {filter: brightness(65%) sepia(30%) !important;}
 html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
 `
         let style_Add = document.createElement('style');
-
-
+        let pendingDataTheme = null;
 
         // 如果开启了 [暗黑模式]
         if (menu_value('menu_darkMode')) {
@@ -537,40 +590,47 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                 style_darkMode_4 = style_darkMode_4_firefox
             }
 
-            const browserDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (menu_value('menu_darkModeAuto') && menu_value('menu_darkModeType') === 1) {
-                // 方案 1 + 跟随浏览器：交给知乎自带的"跟随系统"模式，浏览器深浅色切换时页面也会实时跟着变
-                if (getThemeMode() !== 'system') {
-                    setTheme(browserDark ? 'dark' : 'light', 'system');
+            const darkType = Number(menu_value('menu_darkModeType') ?? 0);
+            const autoFollow = Boolean(menu_value('menu_darkModeAuto'));
+            const mql = (window.__zhBeautifyMql = window.matchMedia('(prefers-color-scheme: dark)'));
+            const browserDark = mql.matches;
+
+            if (darkType === 0 || darkType === 1) {
+                // 0 = 知乎官方原生暗黑（零自定义颜色覆盖，保留官方深色配色与原图亮度）
+                // 1 = 脚本自定义暗黑（XIU2 灰蓝配色）
+                const targetTheme = autoFollow ? (browserDark ? 'dark' : 'light') : 'dark';
+                const targetMode = autoFollow ? 'system' : 'manual';
+                pendingDataTheme = targetTheme;
+                if (getTheme() !== targetTheme || getThemeMode() !== targetMode) {
+                    writeCookie('themeApp', targetTheme);
+                    writeCookie('themeModeApp', targetMode);
                 }
-                if (browserDark && location.pathname.indexOf('/log') > -1) {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                    style_darkMode_1 += style_darkMode_1_x;
+                if (autoFollow && typeof mql.addEventListener === 'function') {
+                    mql.addEventListener('change', (e) => {
+                        if (!GM_getValue('menu_darkMode') || !GM_getValue('menu_darkModeAuto')) return;
+                        const curType = Number(GM_getValue('menu_darkModeType') ?? 0);
+                        if (curType !== 0 && curType !== 1) return;
+                        const nextTheme = e.matches ? 'dark' : 'light';
+                        writeCookie('themeApp', nextTheme);
+                        writeCookie('themeModeApp', 'system');
+                        if (document.documentElement) document.documentElement.setAttribute('data-theme', nextTheme);
+                    });
                 }
-                // 样式都限定在 html[data-theme=dark] 下，浏览器为浅色时不会生效
-                if (!(location.hostname.indexOf('zhuanlan') > -1 && (location.pathname.indexOf('/edit') > -1 || location.pathname.indexOf('/write') > -1))) style += style_darkMode_1;
-            } else if (menu_value('menu_darkModeAuto') && !browserDark) {
-                // 开启了 [暗黑模式跟随浏览器] 但当前浏览器是浅色：确保知乎是白天模式
+                if (targetTheme === 'dark' && location.pathname.indexOf('/log') > -1) {
+                    style += style_darkMode_1_x;
+                }
+                if (darkType === 1 && !(location.hostname.indexOf('zhuanlan') > -1 && (location.pathname.indexOf('/edit') > -1 || location.pathname.indexOf('/write') > -1))) {
+                    style += style_darkMode_1;
+                }
+            } else if (autoFollow && !browserDark) {
+                // 滤镜方案 2~4 + 跟随系统且当前系统为浅色：保持白天模式
+                pendingDataTheme = 'light';
                 ensureLight();
             } else {
-                // 如果暗黑模式为 1
-                if (menu_value('menu_darkModeType') === 1) {
-                    // 如果当前知乎主题为白天模式（或仍处于跟随系统模式），那就是改为手动暗黑模式
-                    if (getTheme() === 'light' || getThemeMode() === 'system') {
-                        setTheme('dark');
-                    }
-                    // 如果是问题日志页，则改为暗黑模式
-                    if (location.pathname.indexOf('/log') > -1) {
-                        document.documentElement.setAttribute('data-theme', 'dark');
-                        style_darkMode_1 += style_darkMode_1_x;
-                    }
-                } else { // 如果是其他暗黑模式，则需要确保为白天模式
-                    ensureLight();
-                }
-                switch(menu_value('menu_darkModeType')) {
-                    case 1:
-                        if (!(location.hostname.indexOf('zhuanlan') > -1 && (location.pathname.indexOf('/edit') > -1 || location.pathname.indexOf('/write') > -1))) style += style_darkMode_1;
-                        break;
+                // 滤镜方案 2~4：先确保知乎底层为浅色模式，再叠加滤镜
+                pendingDataTheme = 'light';
+                ensureLight();
+                switch (darkType) {
                     case 2:
                         style += style_darkMode_2;
                         break;
@@ -582,9 +642,11 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
                         break;
                 }
             }
-        } else {
-            ensureLight();
         }
+        // 注意：当 menu_darkMode 关闭时不再强制调用 ensureLight()，完全交还给知乎自带的主题设置
+
+        // 隐藏消息/私信红点
+        if (menu_value('menu_hideRedDot')) style += style_hideRedDot;
 
         // 与路径相关的样式：知乎是单页应用，站内跳转后需要重新计算
         const pathStyle = () => {
@@ -599,7 +661,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             const isPeople = !isZhuanlan && (path.indexOf('/people/') > -1 || path.indexOf('/org/') > -1);
 
             if (path === '/' || path === '/hot' || path === '/follow') style += style_index;
-            if (menu_value('menu_darkMode') && menu_value('menu_darkModeType') === 1 && (path.indexOf('/special/') > -1 || path.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
+            if (menu_value('menu_darkMode') && Number(menu_value('menu_darkModeType')) === 1 && (path.indexOf('/special/') > -1 || path.indexOf('/pub/') > -1)) style += style_darkMode_2 + 'video {filter: invert(1) !important;}';
 
             // 宽屏显示
             const enableTShapeWs =
@@ -628,6 +690,7 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         const appendStyle = () => {
             const root = document.documentElement;
             if (!root) return false;
+            if (pendingDataTheme) root.setAttribute('data-theme', pendingDataTheme);
             root.appendChild(style_Add).textContent = style + pathStyle();
             return true;
         };
@@ -638,9 +701,23 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
             observer.observe(document, {childList: true});
         }
 
-        // 站内跳转（pushState）后按新路径重算样式
+        // 站内跳转（pushState）后按新路径重算样式，并持续兜底同步系统深浅色状态
+        const sysMql = window.matchMedia('(prefers-color-scheme: dark)');
+        const syncSystemTheme = () => {
+            if (!GM_getValue('menu_darkMode') || !GM_getValue('menu_darkModeAuto')) return;
+            const curType = Number(GM_getValue('menu_darkModeType') ?? 0);
+            if (curType !== 0 && curType !== 1) return;
+            const want = sysMql.matches ? 'dark' : 'light';
+            const root = document.documentElement;
+            if (root && root.getAttribute('data-theme') !== want) root.setAttribute('data-theme', want);
+            if (getTheme() !== want || getThemeMode() !== 'system') {
+                writeCookie('themeApp', want);
+                writeCookie('themeModeApp', 'system');
+            }
+        };
         let lastPath = location.hostname + location.pathname;
         const refreshPathStyle = () => {
+            syncSystemTheme();
             const now = location.hostname + location.pathname;
             if (now === lastPath) return;
             lastPath = now;
@@ -899,16 +976,46 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
         return title.replace(/^#+\s*/, '').trim();
     }
 
+    // 清除网页标题前缀中的 "(8 条消息 / 99+ 条私信)"，且不影响站内单页跳转后的正常标题更新
+    function initCleanUnreadTitle() {
+        const prefixRe = /^\s*[（(][^()（）]*条(?:消息|私信)[^()（）]*[)）]\s*/;
+        const stripTitle = () => {
+            if (typeof document.title === 'string' && prefixRe.test(document.title)) {
+                document.title = document.title.replace(prefixRe, '');
+            }
+        };
+        const attach = () => {
+            const titleEl = document.querySelector('head > title');
+            if (!titleEl) return false;
+            stripTitle();
+            new MutationObserver(stripTitle).observe(titleEl, { childList: true, characterData: true, subtree: true });
+            return true;
+        };
+        if (!attach()) {
+            const headObs = new MutationObserver(() => {
+                if (attach()) headObs.disconnect();
+            });
+            headObs.observe(document, { childList: true, subtree: true });
+            setTimeout(() => headObs.disconnect(), 8000);
+        }
+    }
+
     function hideTitle() {
         let beforeScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 
         window.addEventListener('scroll', function () {
-            const floatingElement = document.querySelector('header.AppHeader, header.ColumnPageHeader') || document.getElementsByTagName('header')[0];
-            if (!floatingElement) return;
-            var afterScrollTop = document.documentElement.scrollTop || document.body.scrollTop,
-                delta = afterScrollTop - beforeScrollTop;
+            const headerEl = document.querySelector('header.LeanAppHeaderBar, header.AppHeader, header.ColumnPageHeader') || document.getElementsByTagName('header')[0];
+            if (!headerEl) return;
+            const parent = headerEl.parentElement;
+            const floatingElement = (headerEl.classList.contains('LeanAppHeaderBar') && parent && parent.tagName === 'DIV' && getComputedStyle(parent).position === 'fixed')
+                ? parent
+                : headerEl;
+            const afterScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+            const delta = afterScrollTop - beforeScrollTop;
             if (delta === 0) return false;
-            floatingElement.hidden = delta > 0 && afterScrollTop > 60;
+            const shouldHide = delta > 0 && afterScrollTop > 60;
+            floatingElement.hidden = shouldHide;
+            if (floatingElement !== headerEl) headerEl.hidden = false;
             beforeScrollTop = afterScrollTop;
         }, { passive: true });
     }
@@ -936,18 +1043,19 @@ html {filter: brightness(65%) sepia(30%) !important; background-image: url();}
     }
 
     // 修改知乎 Cookie 中的主题；mode 缺省为 manual。写入后回读确认成功才刷新，避免写不进去时无限刷新
-    function setTheme(theme, mode = 'manual') {
+    function setTheme(theme, mode = 'manual', forceReload = false) {
         const root = document.documentElement;
-        writeCookie('themeApp', theme === 'dark' ? 'dark' : 'light');
+        const normalized = theme === 'dark' ? 'dark' : 'light';
+        writeCookie('themeApp', normalized);
         writeCookie('themeModeApp', mode);
-        if (root) root.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
-        const written = getTheme() === (theme === 'dark' ? 'dark' : 'light') && getThemeMode() === mode;
+        if (root) root.setAttribute('data-theme', normalized);
+        const written = getTheme() === normalized && getThemeMode() === mode;
         if (!written) return;
-        if (theme === 'light' || mode === 'system' || GM_getValue('menu_darkMode')) location.reload(); // 刷新网页
+        if (forceReload || theme === 'light' || mode === 'system' || GM_getValue('menu_darkMode')) location.reload(); // 刷新网页
     }
 
     // 确保是浅色且手动模式（方案 2~4 用滤镜变暗，不能让知乎同时进入原生暗色）
     function ensureLight() {
-        if (getTheme() === 'dark' || getThemeMode() === 'system') setTheme('light');
+        if (getTheme() === 'dark' || getThemeMode() === 'system') setTheme('light', 'manual');
     }
 })();
